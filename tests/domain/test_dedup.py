@@ -57,3 +57,15 @@ def test_canonical_id_handles_none() -> None:
     a = canonical_id(title="AI Engineer", company=None, city=None)
     b = canonical_id(title="ai engineer", company="", city="")
     assert a == b
+
+
+def test_canonical_id_pinned_value() -> None:
+    """Guard against accidental serialization drift in canonical_id hashing."""
+    result = canonical_id(title="QA Engineer", company="TesterHome", city="Hangzhou")
+    assert result == "445e9bf368e83676a23c3e15a0bfc17c886fa244"
+
+
+def test_job_id_with_internal_id_pinned_value() -> None:
+    """Guard against accidental serialization drift in job_id hashing."""
+    result = job_id(source="testerhome", internal_id="42", title="QA", company="x", city="y")
+    assert result == "29fbf773510b7b61753b8fd080385e27cdf11576"
