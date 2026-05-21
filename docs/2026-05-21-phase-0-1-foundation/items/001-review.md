@@ -1,137 +1,81 @@
-Verdict: FAIL
+Verdict: PASS-WITH-NITS
 
-## Summary
+## Round 2 — re-review after fix-round 1
 
-The PR delivers a well-structured Phase 0+1 foundation — 84 tests pass, ruff is clean, the domain layer is genuinely pure, models are frozen, and the TDD discipline is evident throughout. However there is one latent defect severe enough to warrant a FAIL: the 24h URL cache is entirely write-only. `cache.get()` is never called anywhere in `src/`, so `TesterHomeSource` re-fetches every URL on every run, the `--no-cache` flag is semantically inverted (it suppresses writes, not reads), and the cache tests only verify insertion — no test verifies that a subsequent fetch is skipped. This is a spec §7.3 step 2 violation that will silently hammer the live site on re-runs. A secondary latent defect (uncaught exceptions leave `runs.finished_at` permanently NULL) is also worth fixing before merge. Two further latent issues (hardcoded source name in cache writes; blobs written for non-200 bodies) and three nits round out the findings.
-
----
-
-## Findings Table
-
-| file:line | severity | what's wrong | suggested fix |
-|---|---|---|---|
-| `src/jma/sources/testerhome.py:74` + `src/jma/pipeline/crawl.py:36-43` | **latent** | Cache is write-only; `cache.get()` never called; source always re-fetches; `--no-cache` flag suppresses writes instead of reads (backwards from spec §7.3 step 2 and §8) | Add `conn` parameter to `TesterHomeSource` (or pass a `get_cache` callback); call `cache.get(url)` before `http.fetch()`; only call `on_fetch` to write when a real fetch happens; flip `--no-cache` meaning to bypass reads |
-| `src/jma/pipeline/crawl.py:46-58` | **latent** | If `source.crawl()` raises an unhandled exception, `finish_run()` is skipped; `runs.finished_at` stays NULL forever | Wrap body of `async with conn as db:` in try/finally; call `finish_run` with an error sentinel in the finally clause |
-| `src/jma/pipeline/crawl.py:40` | **latent** | `source="testerhome"` is hardcoded in the `on_fetch` closure; when Phase 2 adds more sources, all cache rows will be tagged as `testerhome` | Replace with `result.source` after the crawl call, or thread the source name into the closure from `source_factory` context |
-| `src/jma/sources/testerhome.py:77-82` | **latent** | `blobs.write()` is called before `classify()` check; empty or error bodies (429, 403) are gzipped to disk and never referenced | Gate the `blobs.write()` call on `fetched.status_code == 200`, or move it after the blockage check |
-| `src/jma/domain/normalize.py:51` | nit | `parse_salary` is 51 lines (CLAUDE.md hard limit is < 50) | Extract two `_parse_annual_cny` / `_parse_monthly_k` helpers (3-4 lines each) |
-| `src/jma/domain/normalize.py:98` | nit | `'应届' in s` is dead code; `_FRESH_TOKENS` already contains `'应届'` and `any(tok in lower ...)` covers it | Remove `or '应届' in s` |
-| `src/jma/cli.py:97-109` | nit | Multi-source loop calls `pipeline_run` once per source, creating one DB `Run` per source; spec §2 row 6 says one Run per CLI invocation | Note is Phase 1 only; add a TODO comment that Phase 2 should create a shared run_id before the source loop |
+All four latents and two of three round-1 nits are correctly fixed. The third nit (Phase-2 TODO comment in `cli.py`) is also present. 93 tests pass, ruff is clean. One new minor nit was found during the fix-round regression scan; no new blockers or latents.
 
 ---
 
-## Detailed Notes
+## Verification of round-1 findings
 
-### L1: Cache is write-only — spec §7.3 step 2
+### L1 — URL cache write-only: **fixed**
 
-`cache.get()` is never invoked anywhere in `src/`. A `grep -rn "cache.get"` across `src/` returns nothing.
+`src/jma/pipeline/crawl.py:54-58` — `_cache_get` now calls `await urlcache.get(db, url=url)` on the happy path; returns `None` immediately when `use_cache=False` (correct `--no-cache` semantics per spec §8). `src/jma/sources/testerhome.py:82-87` — cache-hit branch reads `blobs.read()` from `hit.blob_ref` and sets `status_code=200, headers={}` before the shared `classify()` call; the `else` branch (real fetch) remains the only place that calls `on_fetch` (so cache rows are never double-written). Two required tests exist and assert round-trip behaviour:
 
-`TesterHomeSource.crawl()` calls `self._http.fetch(url)` unconditionally every page, every run. The `on_fetch` callback (wired in `crawl.py`) only calls `urlcache.put()`. The `--no-cache` flag selects between `on_fetch` (real write) and `_noop` (no write), so with `--no-cache=True` nothing is written either — the exact opposite of the spec description ("still writes cache rows; just skips reads").
+- `test_second_run_hits_cache_for_fresh_urls` (line 85): `route1.call_count` and `route2.call_count` are pinned after run 1 and asserted not to increase on run 2. PASS.
+- `test_no_cache_skips_reads_but_writes` (line 135): asserts `url_cache` rows are present after two `use_cache=False` runs. PASS. (See nit N1 below for a weakness in this test.)
 
-Consequence: every `jma crawl` re-fetches every page from the live site, even if it was fetched an hour ago. The 24h TTL is inert.
+Cache-hit path calls `classify(status_code=200, headers={}, body_text=..., cfg=...)`. `classify` only consults `headers` when `status_code == 429` (for `Retry-After`); a cached body with `status_code=200` and empty headers is correctly handled — any soft-block markers present in the body still trip the `marker in body_text` check. The `headers={}` shim is safe.
 
-The comment in `testerhome.py` line 76 acknowledges the gap: _"cache integration lives at the pipeline layer in slice 1.11"_ — but `crawl.py` (slice 1.11) only writes, never reads.
+### L2 — Run row dangling on exception: **fixed**
 
-**Fix direction:** Pass `conn` (or a `get_cache: Callable[[str], Awaitable[CacheHit | None]]` callback) into `TesterHomeSource`. In the per-page loop, call `get_cache(url)` first; on a fresh hit, read the blob from disk and skip `http.fetch()`. Only write the new blob+cache row when a real fetch happens. The `use_cache` flag should gate the `get_cache` call (skip read on `--no-cache`), not the write.
+`src/jma/pipeline/crawl.py:75-83` — `try/except Exception` wraps the crawl + insert + finish block; the `except` branch builds a `SourceResult` with `status=SourceStatus.ERROR` and `reason=f"unhandled exception: {type(e).__name__}: {e}"` (captures exception type and message), then calls `finish_run` before re-raising.
 
-### L2: Exception leaves Run row dangling
+`test_unhandled_source_exception_still_finishes_run` (line 183): asserts `pytest.raises(RuntimeError, match="boom")` propagates AND `runs.finished_at is not None` AND `source_results_json` contains `status == "error"`. Both conditions verified. PASS.
 
-In `crawl.py`, `start_run()` writes a row to `runs` before the crawl starts. If `source.crawl()` raises (e.g. an unhandled `httpx` exception), the code reaches Python's default exception propagation and `finish_run()` is never called. The `runs` row stays with `finished_at = NULL` and `source_results_json = NULL`. Future queries that filter on `finished_at IS NOT NULL` will silently miss incomplete runs.
+### L3 — Hardcoded source="testerhome": **fixed**
 
-**Fix direction:**
-```python
-try:
-    result = await source.crawl(...)
-    ...
-    await insert_jobs(db, run_id, list(result.jobs))
-    await finish_run(db, run_id=run_id, source_results=[result])
-except Exception:
-    await finish_run(db, run_id=run_id, source_results=[
-        SourceResult(source="?", status=SourceStatus.ERROR, reason="unhandled exception")
-    ])
-    raise
-```
+`src/jma/pipeline/crawl.py:43,49` — a probe instance is created with no-op callbacks to discover `_probe.name`; the real `_on_fetch` closure tags cache rows with `_probe.name` instead of the literal `"testerhome"`.
 
-### L3: Hardcoded `source="testerhome"` in `on_fetch`
+`test_cache_rows_tagged_with_source_name` (line 234): uses `_FakeNamedSource(name="fake-source")` and asserts `SELECT DISTINCT source FROM url_cache` equals `["fake-source"]`. PASS.
 
-`crawl.py` line 40: `source="testerhome"` is a string literal in the `on_fetch` closure. The cache `source` column becomes meaningless when Phase 2 adds Randstad or Bing sources; every cache row for any source will be tagged as `testerhome`. This makes the `source` column in `url_cache` worthless for filtering and debugging.
+### L4 — Blobs written for non-200: **fixed**
 
-### L4: Blobs written for non-200 responses
+`src/jma/sources/testerhome.py:93-99` — `blobs.write()` is now gated on `status_code == 200`; non-200 paths set `blob_ref = None`.
 
-`testerhome.py` lines 77-80 call `blobs.write()` before `classify()`. A 429 response with an empty body generates a gzipped file on disk (`data/raw/testerhome/<date>/<sha1>.html.gz`) that is never referenced by the cache (since `crawl.py` stores `blob_ref=None` for non-200). These files accumulate silently. More importantly, storing failed-fetch blobs intermingles them with valid HTML blobs under the same directory.
+`test_blob_not_written_on_blocked_response` (line 157): mocks a 429 response, asserts `list(blobs_dir.rglob("*.gz")) == []`. PASS.
 
----
+### Nit: `parse_salary` line count: **fixed**
 
-## Spec Compliance Check
+`_try_annual_cny` (11 lines, returns `Salary | None`) and `_try_monthly_k` (10 lines, returns `Salary | None`) extracted at `normalize.py:35-56`. `parse_salary` body is now 40 lines. All 12 parametrized corpus rows in `test_normalize_salary.py` still pass. USD `$120K-$160K` is handled by the pre-check `_RE_USD_ANNUAL` block at line 66-73 (before either helper is called), so the helper fall-through is correct.
 
-### Decision table (high-risk rows)
+### Nit: Dead `or '应届' in s`: **fixed**
 
-| Row | Spec | Compliance |
-|---|---|---|
-| 4 (dedup) | `job_id = sha1(source:internal_id)` or fallback `sha1(source:norm(title)\|company\|city)`; `canonical_id = sha1(norm(title)\|company\|city)` | PASS — `dedup.py` is correct; `canonical_id` is source-independent; NFKC+lower+collapse consistent |
-| 7 (region filter) | NFKC + case-insensitive substring; empty city kept | PASS — `_filter_region` uses `normalize_for_match` for both needle and city; `city is None` is kept |
-| 8 (blockage scope) | HTTP + soft-block only; parse-result decisions in per-source loop | PASS — `domain/blockage.py` is pure; end-of-listing in `testerhome.py` crawl loop |
-| 9 (PartialHarvest) | Status=OK, jobs=collected, reason starts with `"partial:"` | PASS — implementation matches exactly |
-| 11 (disclosure three-way) | `parseable` / `unparseable` / `absent` via `Salary.disclosure` property | PASS — property implemented correctly |
+Removed. `normalize.py` now only contains `'应届'` inside `_FRESH_TOKENS`; the `any(tok in lower for tok in _FRESH_TOKENS)` expression covers it.
 
-### §3 Module layout — PASS
+### Nit: Phase-2 TODO comment in `cli.py`: **fixed**
 
-All required files present; layout matches spec exactly.
+`cli.py:108` — `# Phase 2 TODO: when multi-source is enabled, create one shared run_id before the source loop (spec §2 row 6).` is present.
 
-### §4 Data models — PASS
+### QA-side nit (pinned hex values in `test_dedup.py`): **fixed**
 
-All fields present with correct types and defaults. `model_config = ConfigDict(frozen=True)` on every model. `Salary.disclosure` property correct. `StrEnum` used instead of `str`-valued `Enum` from spec — this is fine; `StrEnum` is a clean Python 3.11+ equivalent.
-
-### §5 SQLite schema — PASS
-
-DDL in `db.py` matches spec exactly: all columns, all indexes, FK on `run_jobs`, `PRAGMA journal_mode = WAL`, `PRAGMA foreign_keys = ON`. `INSERT OR REPLACE INTO jobs`, `INSERT OR IGNORE INTO run_jobs` semantics correct.
-
-### §6 Blockage classifier decision tree — PASS
-
-First-match-wins order: 429 → 401/403 → >=500 → !=200 → marker → empty body → OK. Matches spec table rows 1–7 exactly. `snippet_around` radius=120 with hard cap at 200 chars.
-
-### §7.3 TesterHome algorithm — PARTIAL FAIL
-
-Steps 1, 3–12 correctly implemented. **Step 2 (cache read) is not implemented.** The source always fetches; `storage.cache.get()` is never called.
-
-### §8 CLI surface — PARTIAL FAIL
-
-Options and defaults match spec. Exit codes are correct (0/2/1). Stdout format matches spec. **`--no-cache` semantics are inverted**: spec says skip cache for fetches but still write; impl skips writes (reads were never done). Since cache reads don't exist, the observable behavior of `--no-cache` is: with flag = writes skipped; without flag = writes happen; in both cases fetches always happen. This is backwards from spec intent.
+`test_canonical_id_pinned_value` asserts `== "445e9bf368e83676a23c3e15a0bfc17c886fa244"` (40 chars). `test_job_id_with_internal_id_pinned_value` asserts `== "29fbf773510b7b61753b8fd080385e27cdf11576"` (40 chars). Both are literal hex strings. PASS.
 
 ---
 
-## CLAUDE.md / FP Compliance Check
+## New findings
+
+### N1 — `test_no_cache_skips_reads_but_writes` weak assertion (nit)
+
+`tests/pipeline/test_crawl_e2e.py:133-167` — the test adds initial mock routes at lines 137-140, then adds duplicate routes inside the loop (lines 146-149). The final assertion `count >= 1` only proves cache rows exist; it does NOT assert the network was hit on _both_ runs (i.e., that `route.call_count == 2` for each page). A future regression where `--no-cache` silently re-enables cache reads would still pass this test as long as at least one cache write occurred. This is a test-coverage nit, not a bug in the production code (which correctly returns `None` on `not use_cache`).
+
+### N2 — Probe factory called twice per `run()` invocation (nit)
+
+`crawl.py:43` — `source_factory` is called once with no-op callbacks to get `_probe.name`, then again at line 60 with real callbacks. For `TesterHomeSource` this is benign (constructor is pure). In future sources with constructor side effects (e.g., opening a connection) this pattern would cause a resource leak. Consider attaching `name` to the `SourceFactory` type or adding a `source_name()` factory companion, but this is Phase-2 work.
+
+### N3 — Double-finish race if `finish_run` itself fails in happy path (nit)
+
+`crawl.py:73` — if `finish_run` in the `try` block raises (e.g., a DB write error), the `except` handler at line 75 catches it and calls `finish_run` again with an error result, overwriting any partial state from the first call. The `UPDATE runs SET ...` in `db.py` is idempotent enough that this is unlikely to cause corruption, but the original `SourceResult` (with real jobs/pages data) would be replaced by the generic error result, losing useful information. Low probability; flagged as nit.
+
+---
+
+## Compliance re-check
 
 | Rule | Status |
 |---|---|
-| Pure functions in `domain/*` — no I/O, no globals, no clock-reading | PASS — all domain files clean; no I/O imports, no `datetime.now` calls |
-| Frozen pydantic models | PASS |
-| Builders use `model_copy(update={...})` | PASS — only one `model_copy` call in `crawl.py`; correct |
-| I/O isolated to `sources/http.py`, `storage/*`, `pipeline/crawl.py`, `cli.py` | PASS — `testerhome.py` is in `sources/` and does legitimate I/O |
-| Small functions (<20 lines ideal, <50 hard) | NEAR-FAIL — `parse_salary` is 51 lines (37 functional); over hard limit by one line |
-| No deeply nested conditionals (>3 levels) | PASS |
+| Pure domain functions — no I/O in `domain/*` | PASS — no change to domain layer |
+| Frozen pydantic models | PASS — all 8 models retain `ConfigDict(frozen=True)` |
+| File line counts | PASS-WITH-NOTE — `testerhome.py` is 282 lines (above the 200-line ideal); no files exceed a hard limit. The bulk is in `_parse_listing`, `_item_to_job`, `_filter_region`, `_filter_keywords` pure helpers that are correctly separated. Acceptable given current scope. |
 | No shared mutable state | PASS |
-| No global mutable state | PASS — `_CITY_PINYIN` is a constant dict |
-
----
-
-## Test Quality Notes
-
-**Strengths:**
-- Tests assert behavior, not implementation (no mock leakage into assertions)
-- `respx` used consistently for all network tests
-- Clock injection via `now=` param used in `cache.py` and `blobs.py` tests (plan judgment call #10)
-- `test_group_by_canonical_id_two_sources` is exactly the right test for the dedup ADR
-- `@pytest.mark.live` correctly opt-in
-
-**Gaps/issues:**
-
-1. **No test for cache reads (biggest gap):** `test_cache.py` tests `put`/`get` in isolation, but there is no integration test that verifies a second crawl against the same URLs uses cached data instead of re-fetching. The `test_crawl_e2e.py` test verifies the cache is *populated* but not that it's *consulted*.
-
-2. **`test_crawl_e2e.py` doesn't test `--no-cache` behavior.** A test with `use_cache=False` should assert that no cache rows are written (or reads skipped).
-
-3. **Exception path not tested in `crawl.py`:** No test verifies that the `runs` row gets a proper `finished_at` value when a source raises. This would catch the L2 latent bug.
-
-4. **`_item_to_job` clock call not injected:** `fetched_at=datetime.now(UTC)` in `testerhome.py:233` makes `fetched_at` non-deterministic; plan judgment call #10 says clocks should be injected. This doesn't break any test now but makes future snapshot-style tests fragile.
-
-5. **`test_crawl_e2e.py` line 53:** asserts `source_results[0].jobs >= 1` but fixture `listing_ok.html` has 3 items; the test would still pass even if filtering dropped 2 of them. Could be more precise.
+| Small functions | PASS — `parse_salary` now 40 lines; helpers ≤ 11 lines |
+| ruff clean | PASS |
