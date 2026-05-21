@@ -155,6 +155,7 @@ Any one of the following marks a source `blocked` (or `partial` if some pages su
 @dataclass(frozen=True)
 class NormalizedPosting:
     id: str                     # sha256(company|title|location|salary_signature)[:16]
+                                # salary_signature = f"{min}-{max}" or "NA" when unparseable
     title: str
     company: str
     location: str
@@ -208,7 +209,9 @@ When LLM is enabled:
    "missing_skills": [...], "fit_rationale": "..."}
   ```
 - **Summarize:** one final call produces `overall_fit_narrative`, `skill_gap_summary`, `recommended_next_steps`.
-- **Total calls:** `ceil(K/10) + 1`. K=50 = 6 calls.
+- **Total chat calls:** `ceil(K/10) + 1`. K=50 = 6 calls.
+
+> Embedding API calls (one per new posting, cached forever by posting `id`) are tracked separately from chat-completion calls — they are ~100× cheaper and counted independently in the budget.
 
 ### 7.4 Cost guardrails
 
@@ -337,9 +340,9 @@ job-market-agent/
 │   ├── storage/
 │   │   ├── cache.py           # raw HTML cache
 │   │   └── db.py              # sqlite for normalized postings + embeddings
+│   ├── data/
+│   │   └── skills.yaml        # packaged keyword dictionary for skill extractor
 │   └── config.py
-├── data/
-│   └── skills.yaml            # keyword dictionary for skill extractor
 └── tests/
     ├── unit/                  # pure-function tests, fast
     ├── adapters/              # recorded-fixture tests per source
@@ -365,7 +368,7 @@ User-emphasized priority: **prove job search works first**, then layer on intell
 - **Exit criterion:** running the command produces real data from `testerhome`.
 
 ### Phase 1 — Source resilience
-- Playwright adapter for one harder source (whichever of `zhaopin`/`liepin` responds best to stealth).
+- Playwright adapter for one harder source (whichever of `zhaopin`/`liepin` responds best to stealth). Includes post-install hook documentation: `playwright install chromium` after `pip install`.
 - Block-detection signals + per-source status reporting.
 - DuckDuckGo search-fallback adapter.
 - 3+ sources concurrent, per-source rate-limited.
@@ -436,6 +439,6 @@ These are the questions the user asked to defer; they belong to the profile-desi
 
 - `jma market --region X --keywords Y` runs end-to-end against ≥3 sources, produces a markdown + HTML report, degrades gracefully when any source is blocked.
 - `jma fit --region X --keywords Y --profile p.yaml` produces a fit report when the profile is complete; exits 2 with a clear missing-field message when incomplete.
-- 100 postings ≤ 10 LLM calls for the market narrative; 50 fit candidates ≤ 6 LLM calls for fit analysis.
+- 100 postings ≤ 10 chat-completion calls for the market narrative; 50 fit candidates ≤ 6 chat-completion calls for fit analysis (embedding calls counted separately).
 - All pure-function modules covered by unit tests; each source adapter has at least one recorded-fixture test.
 - LLM cost is bounded by config and never silently exceeded.
