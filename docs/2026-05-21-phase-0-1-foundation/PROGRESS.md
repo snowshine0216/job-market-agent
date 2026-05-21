@@ -31,3 +31,51 @@ Legend: ⏳ pending · 🔄 in progress · ✅ done (with evidence) · ⚠️ so
 - Spec mode pre-fills `spec` column with ⏭️ — user supplied the spec verbatim.
 - Plan subagent dispatch on opus is mandatory (spec authored intent; plan synthesises step structure).
 - Final landing: this run will NOT merge the feature branch into `main`. Close-out will leave the feature branch open with a final-status line stating so.
+
+---
+
+## Final status (Phase 3 — 2026-05-21)
+
+**Run complete.** All 9 per-phase tasks for item 001 closed with evidence.
+
+**Feature branch:** `autodev/phase-0-1-foundation-feature`
+**Merged into protected branch:** no (left open for user review)
+**Tip of feature branch:** `135e0e0` (squash `ddf6802` + this docs-bookkeeping commit)
+
+### Items merged
+
+| # | Item | Outcome | PR | Squash SHA |
+|---|------|---------|----|------------|
+| 001 | Phase 0 + Phase 1 — Foundation + TesterHome vertical slice | merged | [#2](https://github.com/snowshine0216/job-market-agent/pull/2) | `ddf6802` |
+
+### Items SKIPPED / BLOCKED
+
+None. See [SKIPPED.md](SKIPPED.md) — empty by design (spec-mode run, N=1).
+
+### Phase 3 audit results
+
+- Workflow completeness: N=1, ship=1, qa=1, review=1 — all verdict markers present (`PR: https://…`, `Verdict: PASS`, `Verdict: PASS-WITH-NITS`).
+- `uv run pytest` on merged feature branch: **93 passed, 1 deselected (live), 3 cosmetic warnings**.
+- `uv run ruff check .`: **clean**.
+- `uv run jma crawl --help`: CLI wired with the spec §8 option surface (`--region`, `--keywords`, `--source`, `--max-pages`, `--max-jobs`, `--no-cache`, `-v`).
+
+### Known follow-ups (do not block this run)
+
+- Live smoke `uv run pytest -m live` is per spec §10.2 the maintainer's responsibility to run out-of-band before declaring the phase complete. Not CI-gated, not run by autodev.
+- Manual smoke `uv run jma crawl --region Hangzhou --keywords "AI agent"` against the real TesterHome is also the maintainer's responsibility per spec §10.3.
+- Round-2 review surfaced 3 minor nits (test-shape call-count assertion, factory called twice for `source.name`, `finish_run`-raises-in-happy-path edge case overwriting SourceResult). All are non-blocking; left as known-but-deferred per autodev triage rule. Worth a follow-up issue.
+- 3 cosmetic `PytestCollectionWarning` on class `TesterHomeSource` (name starts with "Test"). Trivial fix (`__test__ = False` or rename) — left as a follow-up.
+
+### Resumability
+
+`.autodev-current` deleted at close-out. The run directory `docs/2026-05-21-phase-0-1-foundation/` remains as the durable record. To resume or audit, read this file + `MASTER-SPEC.md` + `MASTER-PLAN.md` + the `items/*.md` files.
+
+### Next step for the user
+
+The feature branch is open for human review. To land it on `main`:
+
+```
+gh pr create --base main --head autodev/phase-0-1-foundation-feature
+```
+
+…or merge locally if you don't want a PR. Autodev intentionally left this last step to you because the user did not opt into a protected-branch merge this turn.
