@@ -1,1 +1,18 @@
 .autodev-current
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime data
+data/
+!data/.gitignore
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
