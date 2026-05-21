@@ -1,0 +1,17 @@
+name: testerhome
+base_url: https://testerhome.com
+listing:
+  url_template: "{base_url}/jobs?page={page}"
+  list_item_selector: ".topics .topic"
+  title_selector: ".title a"
+  href_attr: "href"
+  posted_at_attr: ".time@title"
+detail:
+  body_selector: ".topic-detail .markdown-body"
+requires_browser: false
+content_block_markers: []
+known_good_list_selector: ".topics .topic"
+rate:
+  delay_ms: 800
+  max_retries: 3
+  backoff_base_s: 2
