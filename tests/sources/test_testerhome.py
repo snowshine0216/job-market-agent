@@ -150,3 +150,19 @@ async def test_max_jobs_truncates_exactly(tmp_path):
         result = await src.crawl(region="", keywords=("",), max_pages=2, max_jobs=2)
     assert len(result.jobs) == 2
     assert result.reason == "max_jobs reached"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blob_not_written_on_blocked_response(tmp_path):
+    """L4: blob must NOT be written when status code != 200 (e.g. 429)."""
+    respx.get("https://testerhome.com/jobs?page=1").mock(
+        return_value=httpx.Response(429, headers={"retry-after": "30"}, text="")
+    )
+    async with httpx.AsyncClient() as ac:
+        src = _make_source(tmp_path, ac)
+        result = await src.crawl(region="", keywords=("",), max_pages=2, max_jobs=100)
+    assert result.status == SourceStatus.RATE_LIMITED
+    blobs_dir = tmp_path / "raw" / "testerhome"
+    blob_files = list(blobs_dir.rglob("*.gz")) if blobs_dir.exists() else []
+    assert blob_files == [], f"Expected no blobs but found {blob_files}"

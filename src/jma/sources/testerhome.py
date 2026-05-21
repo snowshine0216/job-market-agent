@@ -26,6 +26,7 @@ from jma.domain.normalize import (
 from jma.sources.base import SourceConfig
 from jma.sources.http import AsyncHttpClient
 from jma.storage import blobs
+from jma.storage.cache import CacheHit
 
 # Salary tokens we strip out of `title_raw` to derive `title`.
 _RE_SALARY_TOKENS = re.compile(
@@ -39,6 +40,8 @@ _RE_TOPIC_ID = re.compile(r"/topics/(\d+)")
 
 
 _SleepFn = Callable[[float], Awaitable[None]]
+_OnFetchFn = Callable[[str, int, "str | None"], Awaitable[None]]
+_CacheGetFn = Callable[[str], Awaitable["CacheHit | None"]]
 
 
 class TesterHomeSource:
@@ -50,13 +53,15 @@ class TesterHomeSource:
         http: AsyncHttpClient,
         data_root: str | Path,
         sleep: _SleepFn | None = None,
-        on_fetch: Callable[[str, int, str], Awaitable[None]] | None = None,
+        on_fetch: _OnFetchFn | None = None,
+        cache_get: _CacheGetFn | None = None,
     ) -> None:
         self._cfg = cfg
         self._http = http
         self._root = Path(data_root)
         self._sleep: _SleepFn = sleep or asyncio.sleep
         self._on_fetch = on_fetch
+        self._cache_get = cache_get
 
     async def crawl(
         self,
@@ -71,20 +76,35 @@ class TesterHomeSource:
             url = self._cfg.listing.url_template.format(
                 base_url=self._cfg.base_url, page=n
             )
-            fetched = await self._http.fetch(url)
             pages_fetched = n
-            # Write blob for every fetch (cache integration lives at the pipeline layer in slice 1.11).
-            blob_ref = blobs.write(
-                root=self._root, source=self.name, url=url, body=fetched.body,
-            )
 
-            if self._on_fetch is not None:
-                await self._on_fetch(url, fetched.status_code, blob_ref)
+            # L1: try cache first when a cache_get callback is wired in.
+            hit = await self._cache_get(url) if self._cache_get else None
+            if hit and hit.status_code == 200 and hit.blob_ref:
+                body_text = blobs.read(root=self._root, ref=hit.blob_ref)
+                status_code: int = 200
+                headers: dict = {}
+                blob_ref: str | None = hit.blob_ref
+            else:
+                fetched = await self._http.fetch(url)
+                status_code = fetched.status_code
+                headers = fetched.headers
+                body_text = fetched.body
+                # L4: only write blob when the fetch was successful.
+                if status_code == 200:
+                    blob_ref = blobs.write(
+                        root=self._root, source=self.name, url=url, body=body_text,
+                    )
+                else:
+                    blob_ref = None
+                # L3: pass blob_ref (may be None for non-200); on_fetch handles source tagging.
+                if self._on_fetch is not None:
+                    await self._on_fetch(url, status_code, blob_ref)
 
             block = classify(
-                status_code=fetched.status_code,
-                headers=fetched.headers,
-                body_text=fetched.body,
+                status_code=status_code,
+                headers=headers,
+                body_text=body_text,
                 cfg=self._cfg,
             )
             if block.kind is not SourceStatus.OK:
@@ -104,7 +124,7 @@ class TesterHomeSource:
                     pages_fetched=pages_fetched,
                 )
 
-            items = _parse_listing(fetched.body, self._cfg)
+            items = _parse_listing(body_text, self._cfg)
             if not items:
                 if collected:
                     return SourceResult(

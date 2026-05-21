@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import httpx
@@ -37,9 +36,10 @@ def _data_root() -> Path:
 def _factory_for(source_name: str):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
 
-    def _make(ac: httpx.AsyncClient, on_fetch: Callable[[str, int, str], Awaitable[None]]) -> JobSource:
+    def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
         http = AsyncHttpClient(ac, rate=cfg.rate)
-        return TesterHomeSource(cfg=cfg, http=http, data_root=_data_root(), on_fetch=on_fetch)
+        return TesterHomeSource(cfg=cfg, http=http, data_root=_data_root(),
+                                on_fetch=on_fetch, cache_get=cache_get)
 
     return _make
 
@@ -105,6 +105,7 @@ def crawl(
                 max_jobs=max_jobs,
                 use_cache=not no_cache,
             )
+            # Phase 2 TODO: when multi-source is enabled, create one shared run_id before the source loop (spec §2 row 6).
             run_id_final = run_id  # Phase 1: one source, single Run is fine
             all_results.extend(results)
         assert run_id_final is not None
