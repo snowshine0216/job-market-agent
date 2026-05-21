@@ -32,6 +32,29 @@ _RE_DAILY = re.compile(r"日薪\s*(?P<min>\d+)(?:\s*[-–]\s*(?P<max>\d+))?")
 _RE_HOURLY = re.compile(r"时薪\s*(?P<min>\d+)(?:\s*[-–]\s*(?P<max>\d+))?")
 
 
+def _try_annual_cny(s: str, raw: str) -> Salary | None:
+    """Return a Salary for CNY annual format (年薪 X-Y万), or None if no match."""
+    m = _RE_ANNUAL_WAN.search(s)
+    if not m:
+        return None
+    lo = int(m["min"]) * 10000
+    hi = int(m["max"]) * 10000
+    return Salary(min=lo // 12, max=hi // 12, currency="CNY",
+                  period=SalaryPeriod.ANNUAL, months_per_year=12,
+                  raw=raw, parsed=True)
+
+
+def _try_monthly_k(s: str, raw: str) -> Salary | None:
+    """Return a Salary for CNY monthly format (X-YK[·N薪]), or None if no match."""
+    m = _RE_MONTHLY_K.search(s)
+    if not m:
+        return None
+    months = int(m["months"]) if m["months"] else 12
+    return Salary(min=int(m["min"]) * 1000, max=int(m["max"]) * 1000,
+                  currency="CNY", period=SalaryPeriod.MONTHLY,
+                  months_per_year=months, raw=raw, parsed=True)
+
+
 def parse_salary(raw: str) -> Salary:
     if raw == "":
         return Salary(raw="")
@@ -49,14 +72,9 @@ def parse_salary(raw: str) -> Salary:
                       period=SalaryPeriod.ANNUAL, months_per_year=12,
                       raw=raw, parsed=True)
 
-    # CNY annual (年薪 X-Y万).
-    m = _RE_ANNUAL_WAN.search(s)
-    if m:
-        lo = int(m["min"]) * 10000
-        hi = int(m["max"]) * 10000
-        return Salary(min=lo // 12, max=hi // 12, currency="CNY",
-                      period=SalaryPeriod.ANNUAL, months_per_year=12,
-                      raw=raw, parsed=True)
+    result = _try_annual_cny(s, raw)
+    if result:
+        return result
 
     # CNY daily (日薪 X[-Y]).
     m = _RE_DAILY.search(s)
@@ -72,13 +90,9 @@ def parse_salary(raw: str) -> Salary:
                       period=SalaryPeriod.HOURLY, months_per_year=None,
                       raw=raw, parsed=True)
 
-    # CNY monthly (X-YK[·N薪]).
-    m = _RE_MONTHLY_K.search(s)
-    if m:
-        months = int(m["months"]) if m["months"] else 12
-        return Salary(min=int(m["min"]) * 1000, max=int(m["max"]) * 1000,
-                      currency="CNY", period=SalaryPeriod.MONTHLY,
-                      months_per_year=months, raw=raw, parsed=True)
+    result = _try_monthly_k(s, raw)
+    if result:
+        return result
 
     return Salary(raw=raw)
 
@@ -95,7 +109,7 @@ def parse_experience(text: str) -> Experience:
         return Experience(raw="")
     s = _nfkc(text)
     lower = s.lower()
-    if any(tok in lower for tok in _FRESH_TOKENS) or "应届" in s:
+    if any(tok in lower for tok in _FRESH_TOKENS):
         return Experience(min_years=0, max_years=0, raw=text)
     m = _RE_EXP_RANGE.search(s)
     if m:
