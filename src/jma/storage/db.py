@@ -104,7 +104,6 @@ async def open_db(path: str | Path) -> _DbContext:
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = await aiosqlite.connect(str(p))
     await conn.executescript(_DDL)
-    await conn.commit()
     return _DbContext(conn)
 
 
@@ -147,7 +146,7 @@ def _job_to_row(j: Job) -> tuple:
         j.salary.min, j.salary.max, j.salary.currency, j.salary.period.value,
         j.salary.months_per_year, j.salary.raw, 1 if j.salary.parsed else 0,
         j.experience.min_years, j.experience.max_years, j.experience.raw,
-        json.dumps(list(j.skills_raw)), json.dumps(list(j.skills_canonical)),
+        json.dumps(j.skills_raw), json.dumps(j.skills_canonical),
         j.seniority.value, j.responsibilities_summary, j.description_text,
         j.posted_at.isoformat() if j.posted_at else None,
         j.fetched_at.isoformat(), j.url, j.raw_payload_ref, j.data_quality,
