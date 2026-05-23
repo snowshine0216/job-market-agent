@@ -99,3 +99,30 @@ def test_unknown_native_city_in_brackets_yields_none_district() -> None:
     assert loc.city is None
     assert loc.district is None
     assert loc.country == "CN"
+
+
+def test_unknown_native_city_with_district_in_brackets_yields_none_district() -> None:
+    # 厦门·鼓楼: known shape (city·district) but city not in vocabulary.
+    # _build_location must NOT pollute district with "鼓楼" or anything
+    # else; both city and district stay None.
+    loc = parse_location("【厦门·鼓楼】Senior QA")
+    assert loc.city is None
+    assert loc.district is None
+    assert loc.country == "CN"
+
+
+def test_base_prefix_city_followed_by_cjk() -> None:
+    # Greedy regex over-captures "北京工作", but the post-match prefix
+    # lookup resolves to "北京". Without the lookup, this returned
+    # city=None silently — a regression caught in pre-landing review.
+    loc = parse_location("APP测试工程师热招中！base 北京工作")
+    assert loc.city == "Beijing"
+    assert loc.country == "CN"
+
+
+def test_base_prefix_unknown_city_followed_by_cjk() -> None:
+    # 厦门 is not in _CITY_PINYIN yet. Even with the prefix-lookup, the
+    # probe must NOT silently return Beijing or some other city.
+    loc = parse_location("base 厦门总部招聘")
+    assert loc.city is None
+    assert loc.country == "CN"
