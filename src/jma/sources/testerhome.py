@@ -318,6 +318,40 @@ def _parse_detail(body: str, cfg: SourceConfig) -> dict[str, str]:
     }
 
 
+def _enrich_from_detail(job: Job, detail: dict[str, str], source_name: str) -> Job:
+    """Return a new Job with company + salary filled from detail.
+
+    Recomputes canonical_id (ADR-0003: latest-wins). Does NOT recompute
+    `id` — for sources with an internal_id (TesterHome's /topics/NNN),
+    job_id ignores company entirely, so recomputation is dead code that
+    masks intent.
+
+    Empty detail values do NOT clobber pre-existing listing data.
+    Detail salary wins ONLY when it parses cleanly — never replace a
+    parsed=True listing salary with a parsed=False detail salary
+    (preserves [[SalaryDisclosure]] parseable status for Phase 4
+    aggregations).
+    """
+    new_company = detail.get("company") or job.company
+    new_salary = job.salary
+    raw = (detail.get("salary_raw") or "").strip()
+    if raw:
+        candidate = parse_salary(raw)
+        # Detail wins unless it would degrade parseable → unparseable.
+        if candidate.parsed or not job.salary.parsed:
+            new_salary = candidate
+    new_canonical = canonical_id(
+        title=job.title, company=new_company, city=job.location.city
+    )
+    return job.model_copy(
+        update={
+            "canonical_id": new_canonical,
+            "company": new_company,
+            "salary": new_salary,
+        }
+    )
+
+
 def _extract_first_label_value(
     tree: HTMLParser, selectors: tuple[str, ...], patterns: tuple[str, ...]
 ) -> str:
