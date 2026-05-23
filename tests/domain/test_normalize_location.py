@@ -126,3 +126,68 @@ def test_base_prefix_unknown_city_followed_by_cjk() -> None:
     loc = parse_location("base 厦门总部招聘")
     assert loc.city is None
     assert loc.country == "CN"
+
+
+# Issue #10 — first-known-city wins (paren/base/bracket probes fall through
+# when the captured CJK token is not in _CITY_PINYIN). See ADR 0004.
+
+
+def test_paren_role_descriptor_falls_through_to_base_prefix_beijing() -> None:
+    # （高级）matches the paren shape but "高级" is not a city; the base-prefix
+    # probe must win.
+    loc = parse_location("（高级）测试工程师 base 北京")
+    assert loc.city == "Beijing"
+    assert loc.country == "CN"
+
+
+def test_paren_senior_falls_through_to_base_prefix_shanghai() -> None:
+    loc = parse_location("（资深）开发 base 上海")
+    assert loc.city == "Shanghai"
+    assert loc.country == "CN"
+
+
+def test_paren_intern_falls_through_to_base_prefix_hangzhou() -> None:
+    loc = parse_location("（实习）数据分析师 base 杭州")
+    assert loc.city == "Hangzhou"
+    assert loc.country == "CN"
+
+
+def test_paren_parttime_falls_through_to_base_prefix_shenzhen() -> None:
+    loc = parse_location("（兼职）前端 base 深圳")
+    assert loc.city == "Shenzhen"
+    assert loc.country == "CN"
+
+
+def test_paren_parttime_or_intern_falls_through_to_base_prefix_guangzhou() -> None:
+    # （兼职/实习）— the slash is inside the parens; the paren probe captures
+    # only the leading CJK run via its [一-鿿]{2,4} shape, but "兼职" is not a
+    # city. Base-prefix probe must win.
+    loc = parse_location("（兼职/实习）后端 base 广州")
+    assert loc.city == "Guangzhou"
+    assert loc.country == "CN"
+
+
+def test_bracket_non_city_falls_through_to_base_prefix_chengdu() -> None:
+    # 【高级】matches the bracket shape but "高级" is not a city. Base-prefix
+    # probe must win.
+    loc = parse_location("【高级】QA base 成都")
+    assert loc.city == "Chengdu"
+    assert loc.country == "CN"
+
+
+def test_base_prefix_non_city_falls_through_to_bare_scan_beijing() -> None:
+    # base 团队: "团队" is not a city. Fall through to bare-scan, which finds
+    # 北京 inside 北京站 (substring match is _scan_bare_city's documented
+    # behaviour — see test_bare_city_at_start; unchanged by this task).
+    loc = parse_location("base 团队 招聘 北京站")
+    assert loc.city == "Beijing"
+    assert loc.country == "CN"
+
+
+def test_paren_role_descriptor_preserves_work_mode_when_no_city() -> None:
+    # Regression guard: probe fall-through must NOT lose work_mode. The paren
+    # captures a non-city token, every shape probe misses, bare-scan misses,
+    # but "remote" is still in the string so work_mode stays REMOTE.
+    loc = parse_location("（高级）Backend Engineer Remote")
+    assert loc.city is None
+    assert loc.work_mode is WorkMode.REMOTE
