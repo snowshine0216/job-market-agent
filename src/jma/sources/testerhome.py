@@ -169,7 +169,9 @@ class TesterHomeSource:
             # they are NOT anti-bot blocks and must NOT halt the crawl).
             if page.status_code in (404, 410):
                 checked_at = datetime.now(UTC)
-                enriched.append(_apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at))
+                enriched.append(
+                    _apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at)
+                )
                 continue
 
             if page.block.kind is not SourceStatus.OK:
@@ -181,12 +183,16 @@ class TesterHomeSource:
             if page.status_code == 200:
                 detail = _parse_detail(page.body, self._cfg)
                 enriched_job = _enrich_from_detail(job, detail, source_name=self.name)
-                enriched.append(_apply_url_freshness(enriched_job, status_code=200, checked_at=checked_at))
+                enriched.append(
+                    _apply_url_freshness(enriched_job, status_code=200, checked_at=checked_at)
+                )
             else:
                 # Non-200 with classify=OK (e.g. empty/short body not matching
                 # block markers). _apply_url_freshness: other non-200 → preserve
                 # prior signal (3xx, 429, other 4xx, 5xx are transient unknowns).
-                enriched.append(_apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at))
+                enriched.append(
+                    _apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at)
+                )
 
         return enriched, halt
 
@@ -485,15 +491,19 @@ def _apply_url_freshness(
     data_quality is intentionally not touched by this helper.
     """
     if status_code == 200:
-        return job.model_copy(update={
-            "url_status": UrlStatus.LIVE,
-            "url_last_checked_at": checked_at,
-        })
+        return job.model_copy(
+            update={
+                "url_status": UrlStatus.LIVE,
+                "url_last_checked_at": checked_at,
+            }
+        )
     if status_code in (404, 410):
-        return job.model_copy(update={
-            "url_status": UrlStatus.GONE,
-            "url_last_checked_at": checked_at,
-        })
+        return job.model_copy(
+            update={
+                "url_status": UrlStatus.GONE,
+                "url_last_checked_at": checked_at,
+            }
+        )
     return job
 
 

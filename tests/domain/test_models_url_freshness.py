@@ -6,8 +6,7 @@ from jma.domain.models import Experience, Job, Location, Salary, UrlStatus
 
 def _minimal_job() -> Job:
     return Job(
-        id=job_id(source="testerhome", internal_id="1", title="t",
-                  company=None, city=None),
+        id=job_id(source="testerhome", internal_id="1", title="t", company=None, city=None),
         canonical_id=canonical_id(title="t", company=None, city=None),
         source="testerhome",
         title="t",

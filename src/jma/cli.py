@@ -62,9 +62,7 @@ def _summary_lines(
         n = len(r.jobs)
         total_obs += n
         if r.status is SourceStatus.OK:
-            line = (
-                f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}"
-            )
+            line = f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}"
             if any(j.url_last_checked_at is not None for j in r.jobs):
                 gone = sum(1 for j in r.jobs if j.url_status is UrlStatus.GONE)
                 line += f"   gone_urls={gone}"

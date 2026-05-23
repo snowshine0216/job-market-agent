@@ -113,6 +113,7 @@ async def _apply_jobs_migrations(conn: aiosqlite.Connection) -> None:
     IF NOT EXISTS for ALTER TABLE ADD COLUMN, so we swallow the
     duplicate-column error."""
     import sqlite3
+
     for stmt in _JOBS_MIGRATIONS:
         try:
             await conn.execute(stmt)

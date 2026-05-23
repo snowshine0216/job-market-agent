@@ -78,7 +78,7 @@ async def test_crawl_with_detail_enabled_populates_company_and_salary(tmp_path: 
     assert job.salary.max == 50000
     assert job.url_status is UrlStatus.LIVE
     assert job.url_last_checked_at is not None
-    assert job.data_quality == 1.0   # explicitly unchanged — no quality coupling
+    assert job.data_quality == 1.0  # explicitly unchanged — no quality coupling
 
 
 @respx.mock
@@ -137,7 +137,7 @@ async def test_crawl_with_detail_falls_back_on_detail_404(tmp_path: Path) -> Non
     assert j.company is None
     assert j.url_status is UrlStatus.GONE
     assert j.url_last_checked_at is not None
-    assert j.data_quality == 1.0   # ADR 0003: gone does NOT lower data_quality
+    assert j.data_quality == 1.0  # ADR 0003: gone does NOT lower data_quality
 
 
 @respx.mock

@@ -1,9 +1,12 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
 import pytest
 
-from jma.storage.db import open_db
+from jma.domain.dedup import canonical_id, job_id
+from jma.domain.models import Experience, Job, Location, Salary, UrlStatus
+from jma.storage.db import insert_jobs, open_db, start_run
 
 # A schema snapshot from before the url_status migration.
 _OLD_DDL = """
@@ -72,17 +75,9 @@ async def test_open_db_is_idempotent_on_already_migrated_db(tmp_path: Path) -> N
         await db.execute("SELECT 1")
 
 
-from datetime import UTC, datetime
-
-from jma.domain.dedup import canonical_id, job_id
-from jma.domain.models import Experience, Job, Location, Salary, UrlStatus
-from jma.storage.db import insert_jobs, start_run
-
-
 def _job(**overrides) -> Job:
     base = dict(
-        id=job_id(source="testerhome", internal_id="9", title="t",
-                  company=None, city=None),
+        id=job_id(source="testerhome", internal_id="9", title="t", company=None, city=None),
         canonical_id=canonical_id(title="t", company=None, city=None),
         source="testerhome",
         title="t",
