@@ -41,6 +41,12 @@ class SourceStatus(StrEnum):
     ERROR = "error"
 
 
+class UrlStatus(StrEnum):
+    LIVE = "live"
+    GONE = "gone"
+    UNKNOWN = "unknown"
+
+
 class Location(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -107,6 +113,8 @@ class Job(BaseModel):
     url: str
     raw_payload_ref: str
     data_quality: float = 1.0
+    url_status: UrlStatus = UrlStatus.UNKNOWN
+    url_last_checked_at: datetime | None = None
 
 
 class SourceResult(BaseModel):
