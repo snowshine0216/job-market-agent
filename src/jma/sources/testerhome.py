@@ -133,6 +133,56 @@ class TesterHomeSource:
             block=block,
         )
 
+    async def _enrich_page(
+        self, page_jobs: list[Job]
+    ) -> tuple[list[Job], str | None]:
+        """Run detail-fetch enrichment for one page's jobs.
+
+        Returns (enriched_jobs, halt_reason). When halt_reason is set
+        (e.g. a detail page tripped classify()), the caller must treat
+        the entire crawl as a PartialHarvest and not fetch further
+        listing pages.
+
+        Errors are isolated per-job: a network failure on one detail
+        keeps that job at listing-only quality and continues. A classify
+        non-OK on any detail halts the rest of this page AND the rest
+        of the crawl.
+        """
+        if not self._cfg.detail.enabled:
+            return page_jobs, None
+
+        enriched: list[Job] = []
+        halt: str | None = None
+        for job in page_jobs:
+            if halt is not None:
+                enriched.append(job)  # keep as listing-only
+                continue
+
+            await self._sleep(self._cfg.rate.delay_ms / 1000.0)
+
+            try:
+                page = await self._fetch_classified(job.url)
+            except httpx.HTTPError as exc:
+                _log.debug("detail fetch network error for %s: %s", job.url, exc)
+                enriched.append(job)
+                continue
+
+            if page.block.kind is not SourceStatus.OK:
+                halt = f"detail block: {page.block.kind.value}: {page.block.reason}"
+                enriched.append(job)
+                continue
+
+            if page.status_code != 200:
+                # Non-200 with classify=OK (e.g. 404 with empty/short body
+                # not matching block markers). Keep listing-only.
+                enriched.append(job)
+                continue
+
+            detail = _parse_detail(page.body, self._cfg)
+            enriched.append(_enrich_from_detail(job, detail, source_name=self.name))
+
+        return enriched, halt
+
     async def crawl(
         self,
         region: str,
@@ -194,7 +244,24 @@ class TesterHomeSource:
             ]
             page_jobs = _filter_region(page_jobs, region)
             page_jobs = _filter_keywords(page_jobs, keywords)
+
+            # Pre-truncate before detail-enrichment to avoid wasting
+            # HTTP calls on jobs we'll discard for max_jobs.
+            remaining = max_jobs - len(collected)
+            if remaining < len(page_jobs):
+                page_jobs = page_jobs[:remaining]
+
+            page_jobs, detail_halt = await self._enrich_page(page_jobs)
             collected.extend(page_jobs)
+
+            if detail_halt is not None:
+                return SourceResult(
+                    source=self.name,
+                    status=SourceStatus.OK,
+                    jobs=tuple(collected),
+                    reason=f"partial: stopped at page {n} ({detail_halt})",
+                    pages_fetched=pages_fetched,
+                )
 
             if len(collected) >= max_jobs:
                 collected = collected[:max_jobs]
