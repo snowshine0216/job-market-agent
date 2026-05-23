@@ -146,7 +146,13 @@ needed, belongs in a separate field, not as a fallback for `city`.
 when both a known city *and* its district are explicitly disclosed
 together — never as a fallback container for unknown city names. A
 title like `【厦门】X` (where `厦门` isn't in the city vocabulary yet)
-yields `city=None, district=None`, not `district="厦门"`. See ADR 0003
+yields `city=None, district=None`, not `district="厦门"`. The
+shape-based probes (bracket / paren / base-prefix) are tried in fixed
+precedence order and the **first probe whose captured token is a known
+city wins** — probes that capture a non-city CJK token (e.g. a role
+descriptor like `（高级）`) fall through to the next probe. See
+[ADR 0004](docs/adr/0004-location-probe-first-known-city-wins.md)
+(which supersedes [ADR 0003](docs/adr/0003-location-probe-precedence.md))
 for the parser precedence rules.
 
 `work_mode` is independent of city: a posting can be both
