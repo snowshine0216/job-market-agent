@@ -191,3 +191,59 @@ def test_paren_role_descriptor_preserves_work_mode_when_no_city() -> None:
     loc = parse_location("（高级）Backend Engineer Remote")
     assert loc.city is None
     assert loc.work_mode is WorkMode.REMOTE
+
+
+# Issue #10 — P0: excise probe-captured substrings before bare-scan --------
+# After all shape probes fall through, bare-scan must NOT see the substrings
+# that those probes captured (even if the token didn't resolve to a city).
+# This prevents 【北京路】 → Beijing (北京路 is a Shanghai street name).
+
+
+def test_bracket_unknown_city_does_not_fall_through_to_bare_scan_substring_match() -> None:
+    # 【北京路】 matches bracket shape. "北京路" is not in _CITY_PINYIN so
+    # _resolve_native_city returns None. The bare-scan must NOT then find "北京"
+    # inside the excised string — it must return city=None.
+    loc = parse_location("【北京路】QA工程师")
+    assert loc.city is None
+
+
+def test_bracket_shanghai_street_name_not_misattributed_to_beijing() -> None:
+    # 北京东路 is a street in Shanghai. Bracket probe captures "北京东路招聘中心",
+    # which is not in _CITY_PINYIN. Bare-scan on the excised string must not
+    # match "北京" inside the captured (now-removed) bracket content.
+    loc = parse_location("软件测试工程师【北京东路招聘中心】")
+    assert loc.city is None
+
+
+def test_paren_role_descriptor_remainder_bare_scan_still_finds_city() -> None:
+    # Paren probe captures "高级" (non-city, falls through).
+    # Bare-scan on the excised remainder "数据分析师 杭州站点" still finds "杭州".
+    loc = parse_location("（高级）数据分析师 杭州站点")
+    assert loc.city == "Hangzhou"
+
+
+def test_bracket_city_district_concatenated_no_middot_returns_none() -> None:
+    # 【北京朝阳】 — city + district concatenated without middot separator.
+    # The bracket probe's regex expects city·district with a middot, so
+    # "北京朝阳" as a whole is not in _CITY_PINYIN, probe falls through.
+    # Bare-scan runs on the excised string (without 北京朝阳), so city=None.
+    # This pins the new post-P0-fix behaviour; a future refactor must not
+    # silently re-introduce Beijing attribution here.
+    loc = parse_location("【北京朝阳】QA")
+    assert loc.city is None
+
+
+def test_bracket_city_district_middot_still_resolves() -> None:
+    # 【北京·朝阳】 — bracket probe correctly splits on middot and resolves
+    # "北京" → Beijing. This must not be broken by the excision change.
+    loc = parse_location("【北京·朝阳】QA工程师")
+    assert loc.city == "Beijing"
+
+
+def test_remote_sentinel_in_bracket_preserves_country_cn() -> None:
+    # 【远程】 matches bracket shape; the REMOTE sentinel branch must set
+    # country="CN" (the shape probe implies a CN context) and must not
+    # silently discard the caller-supplied work_mode context.
+    loc = parse_location("【远程】Backend Engineer")
+    assert loc.country == "CN"
+    assert loc.work_mode is WorkMode.REMOTE
