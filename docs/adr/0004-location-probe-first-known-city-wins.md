@@ -106,3 +106,11 @@ resolves to `city=None` instead of Beijing. Mitigation: use
 `【北京·朝阳】` with a middot — the bracket probe's
 `(?:·[一-鿿]{2,6})?` group already handles city·district splitting and
 correctly returns `city=Beijing, district=Chaoyang`.
+
+**Multiple spans per title:** excision before bare-scan uses
+`re.sub(pattern, ' ', s)` applied to each of the three shape patterns in
+sequence, not just the per-probe captured span. This prevents a *second*
+bracket or paren later in the same title (e.g. `【高级】工程师【北京路】`)
+from leaking its internal CJK content into `_scan_bare_city` when the
+first probe fell through. The old approach (`str.replace(captured, ' ', 1)`)
+only removed the first match seen by each probe's `pattern.search()` call.
