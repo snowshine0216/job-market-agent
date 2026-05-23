@@ -38,6 +38,7 @@ def test_no_brackets_no_city() -> None:
 
 # Four patterns from issue #6 ---------------------------------------------
 
+
 def test_chinese_paren_city() -> None:
     loc = parse_location("招聘中高级测试工程师（武汉）")
     assert loc.city == "Wuhan"
@@ -65,6 +66,7 @@ def test_bare_city_at_start() -> None:
 
 
 # Guard tests — must NOT extract a city ----------------------------------
+
 
 def test_english_paren_does_not_match() -> None:
     # ASCII parens around English content must not trip the paren probe.

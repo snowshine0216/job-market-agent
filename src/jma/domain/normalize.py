@@ -1,4 +1,5 @@
 """Pure parsers for salary, experience, location strings (spec §1)."""
+
 from __future__ import annotations
 
 import re
@@ -25,9 +26,7 @@ _RE_MONTHLY_K = re.compile(
     r"(?P<min>\d+)\s*[Kk]?\s*[-–]\s*(?P<max>\d+)\s*[Kk](?:\s*·\s*(?P<months>\d+)\s*薪)?"
 )
 _RE_ANNUAL_WAN = re.compile(r"年薪\s*(?P<min>\d+)\s*[-–]\s*(?P<max>\d+)\s*万")
-_RE_USD_ANNUAL = re.compile(
-    r"\$\s*(?P<min>\d+)\s*K\s*[-–]\s*\$?\s*(?P<max>\d+)\s*K", re.IGNORECASE
-)
+_RE_USD_ANNUAL = re.compile(r"\$\s*(?P<min>\d+)\s*K\s*[-–]\s*\$?\s*(?P<max>\d+)\s*K", re.IGNORECASE)
 _RE_DAILY = re.compile(r"日薪\s*(?P<min>\d+)(?:\s*[-–]\s*(?P<max>\d+))?")
 _RE_HOURLY = re.compile(r"时薪\s*(?P<min>\d+)(?:\s*[-–]\s*(?P<max>\d+))?")
 
@@ -39,9 +38,15 @@ def _try_annual_cny(s: str, raw: str) -> Salary | None:
         return None
     lo = int(m["min"]) * 10000
     hi = int(m["max"]) * 10000
-    return Salary(min=lo // 12, max=hi // 12, currency="CNY",
-                  period=SalaryPeriod.ANNUAL, months_per_year=12,
-                  raw=raw, parsed=True)
+    return Salary(
+        min=lo // 12,
+        max=hi // 12,
+        currency="CNY",
+        period=SalaryPeriod.ANNUAL,
+        months_per_year=12,
+        raw=raw,
+        parsed=True,
+    )
 
 
 def _try_monthly_k(s: str, raw: str) -> Salary | None:
@@ -50,9 +55,15 @@ def _try_monthly_k(s: str, raw: str) -> Salary | None:
     if not m:
         return None
     months = int(m["months"]) if m["months"] else 12
-    return Salary(min=int(m["min"]) * 1000, max=int(m["max"]) * 1000,
-                  currency="CNY", period=SalaryPeriod.MONTHLY,
-                  months_per_year=months, raw=raw, parsed=True)
+    return Salary(
+        min=int(m["min"]) * 1000,
+        max=int(m["max"]) * 1000,
+        currency="CNY",
+        period=SalaryPeriod.MONTHLY,
+        months_per_year=months,
+        raw=raw,
+        parsed=True,
+    )
 
 
 def parse_salary(raw: str) -> Salary:
@@ -68,9 +79,15 @@ def parse_salary(raw: str) -> Salary:
     if m:
         lo = int(m["min"]) * 1000
         hi = int(m["max"]) * 1000
-        return Salary(min=lo // 12, max=hi // 12, currency="USD",
-                      period=SalaryPeriod.ANNUAL, months_per_year=12,
-                      raw=raw, parsed=True)
+        return Salary(
+            min=lo // 12,
+            max=hi // 12,
+            currency="USD",
+            period=SalaryPeriod.ANNUAL,
+            months_per_year=12,
+            raw=raw,
+            parsed=True,
+        )
 
     result = _try_annual_cny(s, raw)
     if result:
@@ -79,16 +96,28 @@ def parse_salary(raw: str) -> Salary:
     # CNY daily (日薪 X[-Y]).
     m = _RE_DAILY.search(s)
     if m:
-        return Salary(min=None, max=None, currency="CNY",
-                      period=SalaryPeriod.DAILY, months_per_year=None,
-                      raw=raw, parsed=True)
+        return Salary(
+            min=None,
+            max=None,
+            currency="CNY",
+            period=SalaryPeriod.DAILY,
+            months_per_year=None,
+            raw=raw,
+            parsed=True,
+        )
 
     # CNY hourly (时薪 X[-Y]).
     m = _RE_HOURLY.search(s)
     if m:
-        return Salary(min=None, max=None, currency="CNY",
-                      period=SalaryPeriod.HOURLY, months_per_year=None,
-                      raw=raw, parsed=True)
+        return Salary(
+            min=None,
+            max=None,
+            currency="CNY",
+            period=SalaryPeriod.HOURLY,
+            months_per_year=None,
+            raw=raw,
+            parsed=True,
+        )
 
     result = _try_monthly_k(s, raw)
     if result:
@@ -175,6 +204,25 @@ def _build_location(
     return Location(country="CN", city=city, district=district, work_mode=work_mode)
 
 
+def _scan_bare_city(s: str) -> str | None:
+    """Return the native city whose first occurrence in `s` is leftmost.
+
+    The tiebreak is *string position*, not dict-insertion order — stable
+    under any `_CITY_PINYIN` reordering. See ADR 0003.
+
+    Lowest-priority probe: only runs after bracket, paren, and
+    base-prefix all miss.
+    """
+    best_native: str | None = None
+    best_pos = len(s) + 1
+    for native in _CITY_PINYIN:
+        pos = s.find(native)
+        if pos != -1 and pos < best_pos:
+            best_pos = pos
+            best_native = native
+    return best_native
+
+
 def parse_location(text: str) -> Location:
     if text == "":
         return Location()
@@ -198,5 +246,9 @@ def parse_location(text: str) -> Location:
     m = _RE_BASE_PREFIX.search(s)
     if m is not None:
         return _build_location(m["city"], None, work_mode)
+
+    bare = _scan_bare_city(s)
+    if bare is not None:
+        return _build_location(bare, None, work_mode)
 
     return Location(work_mode=work_mode)
