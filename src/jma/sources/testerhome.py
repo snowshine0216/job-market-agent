@@ -21,6 +21,7 @@ from jma.domain.models import (
     Job,
     SourceResult,
     SourceStatus,
+    UrlStatus,
 )
 from jma.domain.normalize import (
     normalize_for_match,
@@ -453,6 +454,37 @@ def _enrich_from_detail(job: Job, detail: dict[str, str], source_name: str) -> J
             "salary": new_salary,
         }
     )
+
+
+def _apply_url_freshness(
+    job: Job,
+    *,
+    status_code: int,
+    checked_at: datetime,
+) -> Job:
+    """Tag a Job with url_status based on a detail-fetch outcome.
+
+    Durable-signal model (see docs/adr/0003-url-freshness-as-durable-signal.md):
+
+    - 200            → url_status=LIVE,  url_last_checked_at=checked_at
+    - 404, 410       → url_status=GONE,  url_last_checked_at=checked_at
+    - anything else  → preserve prior url_status and url_last_checked_at
+                       (3xx, 429, other 4xx, 5xx are all 'we don't know
+                        anything new'; never erase an earned signal).
+
+    data_quality is intentionally not touched by this helper.
+    """
+    if status_code == 200:
+        return job.model_copy(update={
+            "url_status": UrlStatus.LIVE,
+            "url_last_checked_at": checked_at,
+        })
+    if status_code in (404, 410):
+        return job.model_copy(update={
+            "url_status": UrlStatus.GONE,
+            "url_last_checked_at": checked_at,
+        })
+    return job
 
 
 def _extract_first_label_value(
