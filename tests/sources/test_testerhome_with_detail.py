@@ -142,6 +142,41 @@ async def test_crawl_with_detail_falls_back_on_detail_404(tmp_path: Path) -> Non
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_crawl_with_detail_falls_back_on_detail_500(tmp_path: Path) -> None:
+    """A 5xx on a single detail page is a transient server hiccup, NOT an
+    anti-bot block. The crawl must keep the affected job as listing-only
+    and continue — same treatment as a network error or 404.
+    """
+    cfg = _cfg_detail_on()
+
+    respx.get("https://testerhome.com/jobs?page=1").mock(
+        return_value=httpx.Response(200, text=_LISTING_HTML)
+    )
+    respx.get("https://testerhome.com/topics/42").mock(
+        return_value=httpx.Response(500, text="server error")
+    )
+
+    async with httpx.AsyncClient() as ac:
+        src = _make_source(cfg, tmp_path, ac)
+        result = await src.crawl(
+            region="Shanghai",
+            keywords=("测试",),
+            max_pages=1,
+            max_jobs=10,
+        )
+
+    assert result.status is SourceStatus.OK
+    assert "detail block" not in (result.reason or "")
+    assert len(result.jobs) == 1
+    j = result.jobs[0]
+    assert j.company is None  # listing-only fallback
+    # 5xx → preserve prior url_status (UNKNOWN), per ADR-0003.
+    assert j.url_status is UrlStatus.UNKNOWN
+    assert j.url_last_checked_at is None
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_crawl_with_detail_block_converts_to_partial_harvest(tmp_path: Path) -> None:
     """A 200 detail response containing a content_block_marker must:
     - convert the run to PartialHarvest (reason starts 'partial:'),

@@ -140,10 +140,11 @@ class TesterHomeSource:
         the entire crawl as a PartialHarvest and not fetch further
         listing pages.
 
-        Errors are isolated per-job: a network failure on one detail
-        keeps that job at listing-only quality and continues. A classify
-        non-OK on any detail halts the rest of this page AND the rest
-        of the crawl.
+        Errors are isolated per-job: a network failure or per-page
+        server error (5xx, empty body — anything classify maps to ERROR)
+        keeps that job at listing-only quality and continues. Only
+        anti-bot signals (BLOCKED, RATE_LIMITED) halt the rest of this
+        page AND the rest of the crawl.
         """
         if not self._cfg.detail.enabled:
             return page_jobs, None
@@ -174,7 +175,7 @@ class TesterHomeSource:
                 )
                 continue
 
-            if page.block.kind is not SourceStatus.OK:
+            if page.block.kind in (SourceStatus.BLOCKED, SourceStatus.RATE_LIMITED):
                 halt = f"detail block: {page.block.kind.value}: {page.block.reason}"
                 enriched.append(job)
                 continue
