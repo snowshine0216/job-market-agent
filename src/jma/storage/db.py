@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     fetched_at               TEXT NOT NULL,
     url                      TEXT NOT NULL,
     raw_payload_ref          TEXT NOT NULL,
-    data_quality             REAL NOT NULL DEFAULT 1.0
+    data_quality             REAL NOT NULL DEFAULT 1.0,
+    url_status               TEXT NOT NULL DEFAULT 'unknown',
+    url_last_checked_at      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_canonical   ON jobs(canonical_id);
@@ -100,11 +102,32 @@ class _DbContext:
         await self._conn.close()
 
 
+_JOBS_MIGRATIONS: tuple[str, ...] = (
+    "ALTER TABLE jobs ADD COLUMN url_status TEXT NOT NULL DEFAULT 'unknown'",
+    "ALTER TABLE jobs ADD COLUMN url_last_checked_at TEXT",
+)
+
+
+async def _apply_jobs_migrations(conn: aiosqlite.Connection) -> None:
+    """Idempotent column additions for existing DBs. SQLite has no
+    IF NOT EXISTS for ALTER TABLE ADD COLUMN, so we swallow the
+    duplicate-column error."""
+    import sqlite3
+    for stmt in _JOBS_MIGRATIONS:
+        try:
+            await conn.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+    await conn.commit()
+
+
 async def open_db(path: str | Path) -> _DbContext:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = await aiosqlite.connect(str(p))
     await conn.executescript(_DDL)
+    await _apply_jobs_migrations(conn)
     return _DbContext(conn)
 
 
