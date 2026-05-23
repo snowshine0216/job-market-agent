@@ -121,3 +121,27 @@ Implications:
 - "Show me everything that came from Bing" is `WHERE source LIKE 'bing:%'`.
 - The crawler segment matches `[a-z0-9_]+`; the optional site segment is
   a lowercase hostname.
+
+## Location
+
+The geographic and work-mode attribution of a [[JobObservation]].
+Carries `country`, `city`, `district`, and `work_mode`.
+
+`city` always means **workplace** — where the role will be performed —
+not where the employer is registered. The same Shanghai-headquartered
+company hiring for a Beijing role yields `city="Beijing"`. When the
+posting doesn't disclose the workplace (e.g. only the company name and
+job title are present), `city` is `None`; it is never a best-guess
+inferred from company HQ. A future "company city" attribute, if
+needed, belongs in a separate field, not as a fallback for `city`.
+
+`district` is a sub-city locality (`余杭`, `Pudong`) and is only set
+when both a known city *and* its district are explicitly disclosed
+together — never as a fallback container for unknown city names. A
+title like `【厦门】X` (where `厦门` isn't in the city vocabulary yet)
+yields `city=None, district=None`, not `district="厦门"`. See ADR 0003
+for the parser precedence rules.
+
+`work_mode` is independent of city: a posting can be both
+`city="Beijing"` and `work_mode=REMOTE` if it's a Beijing-anchored
+remote role.
