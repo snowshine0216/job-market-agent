@@ -70,3 +70,103 @@ async def test_open_db_is_idempotent_on_already_migrated_db(tmp_path: Path) -> N
     ctx2 = await open_db(db_path)
     async with ctx2 as db:
         await db.execute("SELECT 1")
+
+
+from datetime import UTC, datetime
+
+from jma.domain.dedup import canonical_id, job_id
+from jma.domain.models import Experience, Job, Location, Salary, UrlStatus
+from jma.storage.db import insert_jobs, start_run
+
+
+def _job(**overrides) -> Job:
+    base = dict(
+        id=job_id(source="testerhome", internal_id="9", title="t",
+                  company=None, city=None),
+        canonical_id=canonical_id(title="t", company=None, city=None),
+        source="testerhome",
+        title="t",
+        title_raw="t",
+        location=Location(),
+        salary=Salary(),
+        experience=Experience(),
+        fetched_at=datetime(2026, 5, 23, 12, 0, tzinfo=UTC),
+        url="https://x/",
+        raw_payload_ref="x.gz",
+    )
+    base.update(overrides)
+    return Job(**base)
+
+
+@pytest.mark.asyncio
+async def test_insert_round_trips_url_status_and_check_time(tmp_path: Path) -> None:
+    db_path = tmp_path / "rt.db"
+    checked_at = datetime(2026, 5, 23, 12, 0, tzinfo=UTC)
+    j = _job(url_status=UrlStatus.GONE, url_last_checked_at=checked_at)
+
+    ctx = await open_db(db_path)
+    async with ctx as db:
+        run_id = await start_run(db, region="", keywords=())
+        await insert_jobs(db, run_id, [j])
+        cur = await db.execute(
+            "SELECT url_status, url_last_checked_at FROM jobs WHERE id=?",
+            (j.id,),
+        )
+        row = await cur.fetchone()
+
+    assert row[0] == "gone"
+    assert row[1] == checked_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_upsert_preserves_earned_freshness_on_listing_only_recrawl(
+    tmp_path: Path,
+) -> None:
+    """Day 1: detail-fetch establishes url_status=live. Day 2: listing-only
+    re-crawl re-inserts the Job with default url_status=unknown. The
+    earned 'live' signal MUST be preserved."""
+    db_path = tmp_path / "preserve.db"
+    t1 = datetime(2026, 5, 23, tzinfo=UTC)
+
+    day1 = _job(url_status=UrlStatus.LIVE, url_last_checked_at=t1)
+    day2 = _job()  # defaults: url_status=UNKNOWN, url_last_checked_at=None
+
+    ctx = await open_db(db_path)
+    async with ctx as db:
+        run_id = await start_run(db, region="", keywords=())
+        await insert_jobs(db, run_id, [day1])
+        await insert_jobs(db, run_id, [day2])
+        cur = await db.execute(
+            "SELECT url_status, url_last_checked_at FROM jobs WHERE id=?",
+            (day1.id,),
+        )
+        row = await cur.fetchone()
+
+    assert row[0] == "live"
+    assert row[1] == t1.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_upsert_lets_definitive_outcomes_overwrite(tmp_path: Path) -> None:
+    """If the new row carries url_status=live or gone, it MUST overwrite
+    whatever was there before — definitive outcomes are authoritative."""
+    db_path = tmp_path / "overwrite.db"
+    t1 = datetime(2026, 5, 23, tzinfo=UTC)
+    t2 = datetime(2026, 5, 24, tzinfo=UTC)
+
+    day1 = _job(url_status=UrlStatus.LIVE, url_last_checked_at=t1)
+    day2 = _job(url_status=UrlStatus.GONE, url_last_checked_at=t2)
+
+    ctx = await open_db(db_path)
+    async with ctx as db:
+        run_id = await start_run(db, region="", keywords=())
+        await insert_jobs(db, run_id, [day1])
+        await insert_jobs(db, run_id, [day2])
+        cur = await db.execute(
+            "SELECT url_status, url_last_checked_at FROM jobs WHERE id=?",
+            (day1.id,),
+        )
+        row = await cur.fetchone()
+
+    assert row[0] == "gone"
+    assert row[1] == t2.isoformat()
