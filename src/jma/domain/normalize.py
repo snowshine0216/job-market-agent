@@ -137,6 +137,10 @@ _CITY_PINYIN: dict[str, str] = {
 }
 
 _RE_BRACKET = re.compile(r"【\s*(?P<inside>[^】]+?)\s*】")
+# After NFKC, full-width parens (（ ）) fold to ASCII ( ). Match only
+# CJK-shaped content — "city" or "city·district" — to avoid mis-firing
+# on English parens like "(Remote)" or "(NYC)". See ADR 0003.
+_RE_PAREN = re.compile(r"[(]\s*(?P<inside>[一-鿿]{2,4}(?:·[一-鿿]{2,6})?)\s*[)]")
 _REMOTE_TOKENS_CN = ("远程",)
 _REMOTE_TOKENS_EN = ("remote",)
 
@@ -174,7 +178,9 @@ def parse_location(text: str) -> Location:
         work_mode = WorkMode.REMOTE
 
     m = _RE_BRACKET.search(s)
-    if not m:
+    if m is None:
+        m = _RE_PAREN.search(s)
+    if m is None:
         return Location(work_mode=work_mode)
 
     inside = m["inside"].strip()
