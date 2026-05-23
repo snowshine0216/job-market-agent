@@ -385,12 +385,11 @@ async def test_transient_500_does_not_overwrite_prior_live_signal(tmp_path: Path
     respx.get("https://testerhome.com/jobs?page=2").mock(
         return_value=httpx.Response(200, text=FIX_EMPTY)
     )
-    respx.get("https://testerhome.com/topics/100").mock(
-        return_value=httpx.Response(500, text="internal server error")
-    )
-    # Topics 101 and 102 don't match the "AI agent" keyword filter or are Beijing,
-    # but mock them anyway to avoid respx UnmatchedRequest errors.
-    respx.get("https://testerhome.com/topics/102").mock(
+    # Catch-all for all topic detail URLs: topic 100 returns 500 (the case under
+    # test), topic 101 is filtered out by region (Beijing), topic 102 survives
+    # both the Hangzhou-region and "AI agent" keyword filters and would also be
+    # fetched. Using a regex catch-all keeps the test robust to fixture changes.
+    respx.get(url__regex=r"https://testerhome\.com/topics/\d+").mock(
         return_value=httpx.Response(500, text="internal server error")
     )
 

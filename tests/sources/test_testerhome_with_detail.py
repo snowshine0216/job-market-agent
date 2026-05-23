@@ -129,6 +129,8 @@ async def test_crawl_with_detail_falls_back_on_detail_404(tmp_path: Path) -> Non
             max_jobs=10,
         )
 
+    # Crawl-level status is OK — a 404 on one detail must not escalate to ERROR.
+    assert result.status is SourceStatus.OK
     # Listing-only data preserved; freshness reflects the 404.
     assert len(result.jobs) == 1
     j = result.jobs[0]
