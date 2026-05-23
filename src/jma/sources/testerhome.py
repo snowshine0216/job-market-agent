@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urljoin
 
+import httpx
 from selectolax.parser import HTMLParser
 
 from jma.domain.blockage import classify
 from jma.domain.dedup import canonical_id, job_id
 from jma.domain.models import (
+    BlockStatus,
     Job,
     SourceResult,
     SourceStatus,
@@ -39,10 +43,21 @@ _RE_SALARY_TOKENS = re.compile(
 )
 _RE_TOPIC_ID = re.compile(r"/topics/(\d+)")
 
+_log = logging.getLogger(__name__)
+
 
 _SleepFn = Callable[[float], Awaitable[None]]
 _OnFetchFn = Callable[[str, int, "str | None"], Awaitable[None]]
 _CacheGetFn = Callable[[str], Awaitable["CacheHit | None"]]
+
+
+@dataclass(frozen=True)
+class _ClassifiedFetch:
+    status_code: int
+    headers: dict[str, str]
+    body: str
+    blob_ref: str | None  # None when cache hit was blocked OR classify is non-OK
+    block: BlockStatus
 
 
 class TesterHomeSource:
@@ -64,6 +79,60 @@ class TesterHomeSource:
         self._on_fetch = on_fetch
         self._cache_get = cache_get
 
+    async def _fetch_classified(self, url: str) -> _ClassifiedFetch:
+        """Cache-or-fetch → classify → blob/cache write IFF classify OK.
+
+        Used by both listing-page and detail-page fetches. Never writes
+        a blob or calls on_fetch when classify returns non-OK — this
+        keeps the URL cache from being poisoned by anti-bot responses
+        for the next 24h.
+        """
+        hit = await self._cache_get(url) if self._cache_get else None
+        if hit and hit.status_code == 200 and hit.blob_ref:
+            body_text = blobs.read(root=self._root, ref=hit.blob_ref)
+            block = classify(
+                status_code=200, headers={}, body_text=body_text, cfg=self._cfg
+            )
+            return _ClassifiedFetch(
+                status_code=200,
+                headers={},
+                body=body_text,
+                blob_ref=hit.blob_ref,
+                block=block,
+            )
+
+        fetched = await self._http.fetch(url)
+        block = classify(
+            status_code=fetched.status_code,
+            headers=fetched.headers,
+            body_text=fetched.body,
+            cfg=self._cfg,
+        )
+
+        blob_ref: str | None = None
+        if block.kind is SourceStatus.OK and fetched.status_code == 200:
+            blob_ref = blobs.write(
+                root=self._root,
+                source=self.name,
+                url=url,
+                body=fetched.body,
+            )
+            if self._on_fetch is not None:
+                await self._on_fetch(url, fetched.status_code, blob_ref)
+        elif self._on_fetch is not None and fetched.status_code != 200:
+            # Non-200 (404, 5xx, etc.) still gets a url_cache entry so
+            # future runs can see "we tried this URL". 200+block is the
+            # case we deliberately skip — see docstring.
+            await self._on_fetch(url, fetched.status_code, None)
+
+        return _ClassifiedFetch(
+            status_code=fetched.status_code,
+            headers=fetched.headers,
+            body=fetched.body,
+            blob_ref=blob_ref,
+            block=block,
+        )
+
     async def crawl(
         self,
         region: str,
@@ -77,38 +146,11 @@ class TesterHomeSource:
             url = self._cfg.listing.url_template.format(base_url=self._cfg.base_url, page=n)
             pages_fetched = n
 
-            # L1: try cache first when a cache_get callback is wired in.
-            hit = await self._cache_get(url) if self._cache_get else None
-            if hit and hit.status_code == 200 and hit.blob_ref:
-                body_text = blobs.read(root=self._root, ref=hit.blob_ref)
-                status_code: int = 200
-                headers: dict = {}
-                blob_ref: str | None = hit.blob_ref
-            else:
-                fetched = await self._http.fetch(url)
-                status_code = fetched.status_code
-                headers = fetched.headers
-                body_text = fetched.body
-                # L4: only write blob when the fetch was successful.
-                if status_code == 200:
-                    blob_ref = blobs.write(
-                        root=self._root,
-                        source=self.name,
-                        url=url,
-                        body=body_text,
-                    )
-                else:
-                    blob_ref = None
-                # L3: pass blob_ref (may be None for non-200); on_fetch handles source tagging.
-                if self._on_fetch is not None:
-                    await self._on_fetch(url, status_code, blob_ref)
+            page = await self._fetch_classified(url)
+            body_text = page.body
+            blob_ref = page.blob_ref
+            block = page.block
 
-            block = classify(
-                status_code=status_code,
-                headers=headers,
-                body_text=body_text,
-                cfg=self._cfg,
-            )
             if block.kind is not SourceStatus.OK:
                 if collected:
                     return SourceResult(
