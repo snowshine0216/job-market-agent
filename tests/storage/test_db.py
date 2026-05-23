@@ -53,10 +53,15 @@ async def test_start_and_finish_run(tmp_path: Path) -> None:
         await finish_run(
             conn,
             run_id=run_id,
-            source_results=[SourceResult(source="testerhome", status=SourceStatus.OK,
-                                         pages_fetched=1, elapsed_ms=100)],
+            source_results=[
+                SourceResult(
+                    source="testerhome", status=SourceStatus.OK, pages_fetched=1, elapsed_ms=100
+                )
+            ],
         )
-        cur = await conn.execute("SELECT region, keywords_json, source_results_json FROM runs WHERE id=?", (run_id,))
+        cur = await conn.execute(
+            "SELECT region, keywords_json, source_results_json FROM runs WHERE id=?", (run_id,)
+        )
         row = await cur.fetchone()
     assert row[0] == "Hangzhou"
     assert "AI agent" in row[1]
@@ -72,7 +77,9 @@ async def test_insert_jobs_replace_and_run_edges(tmp_path: Path) -> None:
         await insert_jobs(conn, run_id, [j, j])
         cur = await conn.execute("SELECT COUNT(*) FROM jobs WHERE id=?", (j.id,))
         assert (await cur.fetchone())[0] == 1
-        cur = await conn.execute("SELECT COUNT(*) FROM run_jobs WHERE run_id=? AND job_id=?", (run_id, j.id))
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM run_jobs WHERE run_id=? AND job_id=?", (run_id, j.id)
+        )
         assert (await cur.fetchone())[0] == 1
 
 
@@ -86,9 +93,7 @@ async def test_group_by_canonical_id_two_sources(tmp_path: Path) -> None:
         j_bing = _job("bing:zhaopin.com", "z-456", "AI Agent", "Foo", "Hangzhou")
         assert j_th.canonical_id == j_bing.canonical_id  # by construction
         await insert_jobs(conn, run_id, [j_th, j_bing])
-        cur = await conn.execute(
-            "SELECT canonical_id, COUNT(*) FROM jobs GROUP BY canonical_id"
-        )
+        cur = await conn.execute("SELECT canonical_id, COUNT(*) FROM jobs GROUP BY canonical_id")
         rows = await cur.fetchall()
     assert len(rows) == 1
     assert rows[0][1] == 2  # two observations, one Job

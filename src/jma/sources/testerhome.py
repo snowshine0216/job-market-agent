@@ -1,4 +1,5 @@
 """TesterHomeSource — listing-page crawl (spec §7.3)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -73,9 +74,7 @@ class TesterHomeSource:
         collected: list[Job] = []
         pages_fetched = 0
         for n in range(1, max_pages + 1):
-            url = self._cfg.listing.url_template.format(
-                base_url=self._cfg.base_url, page=n
-            )
+            url = self._cfg.listing.url_template.format(base_url=self._cfg.base_url, page=n)
             pages_fetched = n
 
             # L1: try cache first when a cache_get callback is wired in.
@@ -93,7 +92,10 @@ class TesterHomeSource:
                 # L4: only write blob when the fetch was successful.
                 if status_code == 200:
                     blob_ref = blobs.write(
-                        root=self._root, source=self.name, url=url, body=body_text,
+                        root=self._root,
+                        source=self.name,
+                        url=url,
+                        body=body_text,
                     )
                 else:
                     blob_ref = None
@@ -145,8 +147,7 @@ class TesterHomeSource:
             # Invariant: items only exist when status==200 → blob_ref is always a str here.
             assert blob_ref is not None
             page_jobs = [
-                _item_to_job(item, cfg=self._cfg, source_name=self.name,
-                             blob_ref=blob_ref)
+                _item_to_job(item, cfg=self._cfg, source_name=self.name, blob_ref=blob_ref)
                 for item in items
             ]
             page_jobs = _filter_region(page_jobs, region)
@@ -176,7 +177,9 @@ class TesterHomeSource:
 
         # Unreachable in practice; defensive default.
         return SourceResult(
-            source=self.name, status=SourceStatus.OK, jobs=tuple(collected),
+            source=self.name,
+            status=SourceStatus.OK,
+            jobs=tuple(collected),
             pages_fetched=pages_fetched,
         )
 
@@ -239,8 +242,13 @@ def _item_to_job(item: dict, *, cfg: SourceConfig, source_name: str, blob_ref: s
     company = None  # listing page doesn't expose company
 
     return Job(
-        id=job_id(source=source_name, internal_id=internal_id,
-                  title=title, company=company, city=location.city),
+        id=job_id(
+            source=source_name,
+            internal_id=internal_id,
+            title=title,
+            company=company,
+            city=location.city,
+        ),
         canonical_id=canonical_id(title=title, company=company, city=location.city),
         source=source_name,
         source_internal_id=internal_id,

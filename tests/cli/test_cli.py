@@ -8,7 +8,9 @@ from jma.cli import app
 
 REPO = Path(__file__).resolve().parents[2]
 FIX_OK = (REPO / "tests/fixtures/sources/testerhome/listing_ok.html").read_text(encoding="utf-8")
-FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(encoding="utf-8")
+FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(
+    encoding="utf-8"
+)
 
 
 @respx.mock
@@ -22,8 +24,17 @@ def test_crawl_success_exit_zero(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["crawl", "--region", "Hangzhou", "--keywords", "AI agent",
-         "--max-pages", "3", "--max-jobs", "100"],
+        [
+            "crawl",
+            "--region",
+            "Hangzhou",
+            "--keywords",
+            "AI agent",
+            "--max-pages",
+            "3",
+            "--max-jobs",
+            "100",
+        ],
         env={"JMA_DATA_ROOT": str(tmp_path)},
     )
     assert result.exit_code == 0, result.stdout
@@ -43,8 +54,7 @@ def test_crawl_partial_harvest_still_exit_zero(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["crawl", "--region", "", "--keywords", "",
-         "--max-pages", "3", "--max-jobs", "100"],
+        ["crawl", "--region", "", "--keywords", "", "--max-pages", "3", "--max-jobs", "100"],
         env={"JMA_DATA_ROOT": str(tmp_path)},
     )
     assert result.exit_code == 0
@@ -59,8 +69,17 @@ def test_crawl_all_blocked_exit_two(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["crawl", "--region", "Hangzhou", "--keywords", "AI",
-         "--max-pages", "1", "--max-jobs", "100"],
+        [
+            "crawl",
+            "--region",
+            "Hangzhou",
+            "--keywords",
+            "AI",
+            "--max-pages",
+            "1",
+            "--max-jobs",
+            "100",
+        ],
         env={"JMA_DATA_ROOT": str(tmp_path)},
     )
     assert result.exit_code == 2
@@ -75,8 +94,17 @@ def test_crawl_empty_listing_exit_two(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["crawl", "--region", "Hangzhou", "--keywords", "AI",
-         "--max-pages", "1", "--max-jobs", "100"],
+        [
+            "crawl",
+            "--region",
+            "Hangzhou",
+            "--keywords",
+            "AI",
+            "--max-pages",
+            "1",
+            "--max-jobs",
+            "100",
+        ],
         env={"JMA_DATA_ROOT": str(tmp_path)},
     )
     assert result.exit_code == 2
@@ -93,8 +121,19 @@ def test_crawl_multiple_keywords_are_ored(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["crawl", "--region", "", "--keywords", "AI agent", "--keywords", "Senior",
-         "--max-pages", "3", "--max-jobs", "100"],
+        [
+            "crawl",
+            "--region",
+            "",
+            "--keywords",
+            "AI agent",
+            "--keywords",
+            "Senior",
+            "--max-pages",
+            "3",
+            "--max-jobs",
+            "100",
+        ],
         env={"JMA_DATA_ROOT": str(tmp_path)},
     )
     assert result.exit_code == 0

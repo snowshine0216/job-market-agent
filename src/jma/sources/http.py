@@ -6,6 +6,7 @@ Retry policy:
 - status 401/403/other non-200 → return immediately (no retry).
 - network errors propagate as httpx exceptions; callers may catch.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,4 +53,4 @@ class AsyncHttpClient:
                     body=resp.text,
                     attempts=attempts,
                 )
-            await self._sleep(self._rate.backoff_base_s ** attempts)
+            await self._sleep(self._rate.backoff_base_s**attempts)

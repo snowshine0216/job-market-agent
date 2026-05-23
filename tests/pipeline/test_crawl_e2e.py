@@ -14,17 +14,28 @@ from jma.sources.testerhome import TesterHomeSource
 REPO = Path(__file__).resolve().parents[2]
 CFG_PATH = REPO / "config/sources/testerhome.yaml"
 FIX_OK = (REPO / "tests/fixtures/sources/testerhome/listing_ok.html").read_text(encoding="utf-8")
-FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(encoding="utf-8")
+FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(
+    encoding="utf-8"
+)
 
 
 def _factory(tmp_path: Path):
-    async def _no_sleep(_s: float) -> None: return None
+    async def _no_sleep(_s: float) -> None:
+        return None
+
     cfg = load_source_config(CFG_PATH)
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get):
         http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
-        return TesterHomeSource(cfg=cfg, http=http, data_root=tmp_path,
-                                sleep=_no_sleep, on_fetch=on_fetch, cache_get=cache_get)
+        return TesterHomeSource(
+            cfg=cfg,
+            http=http,
+            data_root=tmp_path,
+            sleep=_no_sleep,
+            on_fetch=on_fetch,
+            cache_get=cache_get,
+        )
+
     return _make
 
 
@@ -56,6 +67,7 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
 
     # DB invariants.
     import aiosqlite
+
     async with aiosqlite.connect(str(tmp_path / "data/jobs.db")) as conn:
         cur = await conn.execute("SELECT COUNT(*) FROM runs WHERE id=?", (run_id,))
         assert (await cur.fetchone())[0] == 1
@@ -79,6 +91,7 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 # L1: second run should hit cache and not re-fetch
 # ---------------------------------------------------------------------------
+
 
 @respx.mock
 @pytest.mark.asyncio
@@ -120,8 +133,12 @@ async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
         use_cache=True,
     )
     assert run2_results[0].status == SourceStatus.OK
-    assert route1.call_count == first_call_count_1, "page 1 was re-fetched despite fresh cache entry"
-    assert route2.call_count == first_call_count_2, "page 2 was re-fetched despite fresh cache entry"
+    assert route1.call_count == first_call_count_1, (
+        "page 1 was re-fetched despite fresh cache entry"
+    )
+    assert route2.call_count == first_call_count_2, (
+        "page 2 was re-fetched despite fresh cache entry"
+    )
     # Both runs produced same jobs.
     assert len(run1_results[0].jobs) == len(run2_results[0].jobs)
 
@@ -129,6 +146,7 @@ async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # L1 + --no-cache: both runs hit network; cache rows are still written
 # ---------------------------------------------------------------------------
+
 
 @respx.mock
 @pytest.mark.asyncio
@@ -171,17 +189,22 @@ async def test_no_cache_skips_reads_but_writes(tmp_path: Path) -> None:
 # L2: unhandled exception in source.crawl must still finish the Run row
 # ---------------------------------------------------------------------------
 
+
 class _ExplodingSource:
     """Fake JobSource that raises mid-crawl."""
+
     name = "exploding-source"
 
-    async def crawl(self, region: str, keywords: tuple, max_pages: int, max_jobs: int) -> SourceResult:
+    async def crawl(
+        self, region: str, keywords: tuple, max_pages: int, max_jobs: int
+    ) -> SourceResult:
         raise RuntimeError("boom — simulated crawl failure")
 
 
 @pytest.mark.asyncio
 async def test_unhandled_source_exception_still_finishes_run(tmp_path: Path) -> None:
     """L2: if source.crawl raises, finish_run must be called; runs row must not have NULL finished_at."""
+
     def _exploding_factory(ac, on_fetch, cache_get) -> JobSource:
         return _ExplodingSource()
 
@@ -204,8 +227,11 @@ async def test_unhandled_source_exception_still_finishes_run(tmp_path: Path) -> 
     assert len(rows) == 1, "Expected exactly one run row"
     finished_at, source_results_json = rows[0]
     assert finished_at is not None, "finished_at must be set even after an exception"
-    assert source_results_json is not None, "source_results_json must be set even after an exception"
+    assert source_results_json is not None, (
+        "source_results_json must be set even after an exception"
+    )
     import json
+
     results = json.loads(source_results_json)
     assert len(results) == 1
     assert results[0]["status"] == "error"
@@ -215,16 +241,21 @@ async def test_unhandled_source_exception_still_finishes_run(tmp_path: Path) -> 
 # L3: cache rows must be tagged with the real source name, not "testerhome" literal
 # ---------------------------------------------------------------------------
 
+
 class _FakeNamedSource:
     """Fake JobSource whose name is configurable for testing L3."""
+
     def __init__(self, name: str, on_fetch, cache_get, data_root: Path) -> None:
         self.name = name
         self._on_fetch = on_fetch
         self._data_root = data_root
 
-    async def crawl(self, region: str, keywords: tuple, max_pages: int, max_jobs: int) -> SourceResult:
+    async def crawl(
+        self, region: str, keywords: tuple, max_pages: int, max_jobs: int
+    ) -> SourceResult:
         url = "https://fake-source.example/jobs?page=1"
         from jma.storage import blobs as _blobs
+
         blob_ref = _blobs.write(root=self._data_root, source=self.name, url=url, body="<html/>")
         await self._on_fetch(url, 200, blob_ref)
         return SourceResult(source=self.name, status=SourceStatus.OK, jobs=())
@@ -236,7 +267,9 @@ async def test_cache_rows_tagged_with_source_name(tmp_path: Path) -> None:
     fake_name = "fake-source"
 
     def _named_factory(ac, on_fetch, cache_get) -> JobSource:
-        return _FakeNamedSource(name=fake_name, on_fetch=on_fetch, cache_get=cache_get, data_root=tmp_path)
+        return _FakeNamedSource(
+            name=fake_name, on_fetch=on_fetch, cache_get=cache_get, data_root=tmp_path
+        )
 
     db_path = tmp_path / "data/jobs.db"
     await run(

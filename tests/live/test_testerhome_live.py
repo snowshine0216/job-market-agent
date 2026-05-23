@@ -16,7 +16,9 @@ CFG_PATH = REPO / "config/sources/testerhome.yaml"
 async def test_testerhome_live_smoke(tmp_path: Path) -> None:
     cfg = load_source_config(CFG_PATH)
     async with httpx.AsyncClient(
-        headers={"User-Agent": "jma-live-smoke/0.1 (+https://github.com/snowshine0216/job-market-agent)"},
+        headers={
+            "User-Agent": "jma-live-smoke/0.1 (+https://github.com/snowshine0216/job-market-agent)"
+        },
         timeout=30.0,
     ) as ac:
         http = AsyncHttpClient(ac, rate=cfg.rate)

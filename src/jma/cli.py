@@ -1,4 +1,5 @@
 """`jma` Typer entry-point (spec §8)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,14 +39,16 @@ def _factory_for(source_name: str, data_root: Path):
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
         http = AsyncHttpClient(ac, rate=cfg.rate)
-        return TesterHomeSource(cfg=cfg, http=http, data_root=data_root,
-                                on_fetch=on_fetch, cache_get=cache_get)
+        return TesterHomeSource(
+            cfg=cfg, http=http, data_root=data_root, on_fetch=on_fetch, cache_get=cache_get
+        )
 
     return _make
 
 
-def _summary_lines(run_id: str, region: str, keywords: tuple[str, ...],
-                   results: list[SourceResult], db_path: Path) -> list[str]:
+def _summary_lines(
+    run_id: str, region: str, keywords: tuple[str, ...], results: list[SourceResult], db_path: Path
+) -> list[str]:
     lines = [
         f"run_id        : {run_id}",
         f"region        : {region or '(empty)'}",
@@ -57,13 +60,13 @@ def _summary_lines(run_id: str, region: str, keywords: tuple[str, ...],
         n = len(r.jobs)
         total_obs += n
         if r.status is SourceStatus.OK:
-            line = f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}   elapsed={r.elapsed_ms/1000:.1f}s"
+            line = f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}   elapsed={r.elapsed_ms / 1000:.1f}s"
             if r.reason.startswith("partial:"):
                 line += f"  {r.reason}"
             lines.append(line)
         else:
             lines.append(
-                f"  {r.source:<11}: {r.status.value}  reason=\"{r.reason}\"  pages={r.pages_fetched}  jobs={n}"
+                f'  {r.source:<11}: {r.status.value}  reason="{r.reason}"  pages={r.pages_fetched}  jobs={n}'
             )
     lines.append(f"written       : {total_obs} observations to {db_path}")
     return lines
@@ -78,7 +81,9 @@ def _exit_code(results: list[SourceResult]) -> int:
 
 @app.command()
 def crawl(
-    region: str = typer.Option(..., "--region", help="Region (e.g. Hangzhou). Empty disables region filter."),
+    region: str = typer.Option(
+        ..., "--region", help="Region (e.g. Hangzhou). Empty disables region filter."
+    ),
     keywords: list[str] = typer.Option(..., "--keywords", help="Repeatable keyword phrase."),
     source: list[str] = typer.Option(["testerhome"], "--source", help="Source name (repeatable)."),
     max_pages: int = typer.Option(5, "--max-pages"),
@@ -86,8 +91,10 @@ def crawl(
     no_cache: bool = typer.Option(False, "--no-cache"),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
-    logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     keywords_t = tuple(keywords)
     data_root = _data_root()  # resolve once; used in factory, pipeline, and summary
     db_path = data_root / "jobs.db"

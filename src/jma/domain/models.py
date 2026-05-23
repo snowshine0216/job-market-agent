@@ -1,4 +1,5 @@
 """Frozen pydantic models for the v1 domain surface (spec §4)."""
+
 from __future__ import annotations
 
 from datetime import datetime

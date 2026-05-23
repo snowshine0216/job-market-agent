@@ -1,4 +1,5 @@
 """Crawl orchestration (spec §11 slice 1.11)."""
+
 from __future__ import annotations
 
 import time

@@ -1,4 +1,5 @@
 """Pure blockage classifier (spec §6). No I/O, no globals, no clock."""
+
 from __future__ import annotations
 
 import re
@@ -35,8 +36,7 @@ def classify(
 ) -> BlockStatus:
     if status_code == 429:
         retry = headers.get("retry-after") or headers.get("Retry-After") or "?"
-        return BlockStatus(kind=SourceStatus.RATE_LIMITED,
-                           reason=f"HTTP 429; Retry-After={retry}s")
+        return BlockStatus(kind=SourceStatus.RATE_LIMITED, reason=f"HTTP 429; Retry-After={retry}s")
     if status_code in (401, 403):
         return BlockStatus(kind=SourceStatus.BLOCKED, reason=f"HTTP {status_code}")
     if status_code >= 500:

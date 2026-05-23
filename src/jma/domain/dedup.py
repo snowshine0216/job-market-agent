@@ -1,4 +1,5 @@
 """Pure dedup keys (spec §2 row 4 / ADR-0001)."""
+
 from __future__ import annotations
 
 import hashlib

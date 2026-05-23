@@ -4,9 +4,15 @@ from jma.domain.normalize import parse_salary
 
 def test_simple_monthly_range() -> None:
     s = parse_salary("10-20K")
-    assert s == Salary(min=10000, max=20000, currency="CNY",
-                       period=SalaryPeriod.MONTHLY, months_per_year=12,
-                       raw="10-20K", parsed=True)
+    assert s == Salary(
+        min=10000,
+        max=20000,
+        currency="CNY",
+        period=SalaryPeriod.MONTHLY,
+        months_per_year=12,
+        raw="10-20K",
+        parsed=True,
+    )
 
 
 def test_monthly_with_14_months() -> None:

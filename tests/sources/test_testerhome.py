@@ -12,13 +12,17 @@ from jma.sources.testerhome import TesterHomeSource
 REPO = Path(__file__).resolve().parents[2]
 CFG_PATH = REPO / "config/sources/testerhome.yaml"
 FIX_OK = (REPO / "tests/fixtures/sources/testerhome/listing_ok.html").read_text(encoding="utf-8")
-FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(encoding="utf-8")
+FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(
+    encoding="utf-8"
+)
 
 
 def _make_source(tmp_path: Path, ac: httpx.AsyncClient) -> TesterHomeSource:
     cfg = load_source_config(CFG_PATH)
+
     async def _no_sleep(_seconds: float) -> None:  # speed up backoff in tests
         return None
+
     http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
     return TesterHomeSource(
         cfg=cfg,

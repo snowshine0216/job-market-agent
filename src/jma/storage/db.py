@@ -1,4 +1,5 @@
 """SQLite bootstrap + Run / Job persistence (spec §5)."""
+
 from __future__ import annotations
 
 import json
@@ -127,8 +128,13 @@ async def finish_run(
     source_results: Iterable[SourceResult],
 ) -> None:
     payload = [
-        {"source": r.source, "status": r.status.value, "reason": r.reason,
-         "pages_fetched": r.pages_fetched, "elapsed_ms": r.elapsed_ms}
+        {
+            "source": r.source,
+            "status": r.status.value,
+            "reason": r.reason,
+            "pages_fetched": r.pages_fetched,
+            "elapsed_ms": r.elapsed_ms,
+        }
         for r in source_results
     ]
     await conn.execute(
@@ -140,16 +146,37 @@ async def finish_run(
 
 def _job_to_row(j: Job) -> tuple:
     return (
-        j.id, j.canonical_id, j.source, j.source_internal_id,
-        j.title, j.title_raw, j.company,
-        j.location.country, j.location.city, j.location.district, j.location.work_mode.value,
-        j.salary.min, j.salary.max, j.salary.currency, j.salary.period.value,
-        j.salary.months_per_year, j.salary.raw, 1 if j.salary.parsed else 0,
-        j.experience.min_years, j.experience.max_years, j.experience.raw,
-        json.dumps(j.skills_raw), json.dumps(j.skills_canonical),
-        j.seniority.value, j.responsibilities_summary, j.description_text,
+        j.id,
+        j.canonical_id,
+        j.source,
+        j.source_internal_id,
+        j.title,
+        j.title_raw,
+        j.company,
+        j.location.country,
+        j.location.city,
+        j.location.district,
+        j.location.work_mode.value,
+        j.salary.min,
+        j.salary.max,
+        j.salary.currency,
+        j.salary.period.value,
+        j.salary.months_per_year,
+        j.salary.raw,
+        1 if j.salary.parsed else 0,
+        j.experience.min_years,
+        j.experience.max_years,
+        j.experience.raw,
+        json.dumps(j.skills_raw),
+        json.dumps(j.skills_canonical),
+        j.seniority.value,
+        j.responsibilities_summary,
+        j.description_text,
         j.posted_at.isoformat() if j.posted_at else None,
-        j.fetched_at.isoformat(), j.url, j.raw_payload_ref, j.data_quality,
+        j.fetched_at.isoformat(),
+        j.url,
+        j.raw_payload_ref,
+        j.data_quality,
     )
 
 

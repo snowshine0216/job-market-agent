@@ -22,9 +22,13 @@ def test_write_uses_correct_path_scheme(tmp_path: Path) -> None:
 
 def test_round_trip(tmp_path: Path) -> None:
     payload = "<html><body>" + ("ABCD" * 1000) + "</body></html>"
-    ref = write(root=tmp_path, source="testerhome",
-                url="https://x/page", body=payload,
-                now=datetime(2026, 5, 21, tzinfo=UTC))
+    ref = write(
+        root=tmp_path,
+        source="testerhome",
+        url="https://x/page",
+        body=payload,
+        now=datetime(2026, 5, 21, tzinfo=UTC),
+    )
     out = read(root=tmp_path, ref=ref)
     assert out == payload
 

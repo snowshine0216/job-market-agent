@@ -39,6 +39,8 @@ def test_jobsource_protocol_runtime_checkable() -> None:
     # A trivial class matching the Protocol signature should pass isinstance.
     class _Fake:
         name = "fake"
+
         async def crawl(self, region, keywords, max_pages, max_jobs):
             return None
+
     assert isinstance(_Fake(), JobSource)
