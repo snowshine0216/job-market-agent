@@ -2,7 +2,14 @@
 
 ## Status
 
-Accepted — 2026-05-23.
+Superseded by [ADR 0004 — first-known-city wins](0004-location-probe-first-known-city-wins.md) — 2026-05-23.
+
+The probe **order** described below (bracket → paren → base-prefix →
+bare-scan) is still authoritative. The **resolution rule** ("first
+shape-match wins") was replaced by "first known-city wins" in ADR 0004
+to recover the common `（role-descriptor）... base 城市` pattern from
+issue #10. The `_scan_bare_city` leftmost-occurrence tiebreak
+documented in this ADR is still in force.
 
 ## Context
 
