@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from jma.domain.models import SourceStatus
+from jma.domain.models import SourceStatus, UrlStatus
 from jma.sources.base import load_source_config
 from jma.sources.http import AsyncHttpClient
 from jma.sources.testerhome import TesterHomeSource
@@ -76,6 +76,9 @@ async def test_crawl_with_detail_enabled_populates_company_and_salary(tmp_path: 
     assert job.salary.parsed is True
     assert job.salary.min == 30000
     assert job.salary.max == 50000
+    assert job.url_status is UrlStatus.LIVE
+    assert job.url_last_checked_at is not None
+    assert job.data_quality == 1.0   # explicitly unchanged — no quality coupling
 
 
 @respx.mock
@@ -126,10 +129,13 @@ async def test_crawl_with_detail_falls_back_on_detail_404(tmp_path: Path) -> Non
             max_jobs=10,
         )
 
-    # Crawl still succeeds with listing-only data.
-    assert result.status == SourceStatus.OK
+    # Listing-only data preserved; freshness reflects the 404.
     assert len(result.jobs) == 1
-    assert result.jobs[0].company is None
+    j = result.jobs[0]
+    assert j.company is None
+    assert j.url_status is UrlStatus.GONE
+    assert j.url_last_checked_at is not None
+    assert j.data_quality == 1.0   # ADR 0003: gone does NOT lower data_quality
 
 
 @respx.mock

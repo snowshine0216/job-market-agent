@@ -164,19 +164,29 @@ class TesterHomeSource:
                 enriched.append(job)
                 continue
 
+            # 404/410 are durable "resource gone" signals — tag and continue
+            # regardless of what classify() returns (it maps them to ERROR, but
+            # they are NOT anti-bot blocks and must NOT halt the crawl).
+            if page.status_code in (404, 410):
+                checked_at = datetime.now(UTC)
+                enriched.append(_apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at))
+                continue
+
             if page.block.kind is not SourceStatus.OK:
                 halt = f"detail block: {page.block.kind.value}: {page.block.reason}"
                 enriched.append(job)
                 continue
 
-            if page.status_code != 200:
-                # Non-200 with classify=OK (e.g. 404 with empty/short body
-                # not matching block markers). Keep listing-only.
-                enriched.append(job)
-                continue
-
-            detail = _parse_detail(page.body, self._cfg)
-            enriched.append(_enrich_from_detail(job, detail, source_name=self.name))
+            checked_at = datetime.now(UTC)
+            if page.status_code == 200:
+                detail = _parse_detail(page.body, self._cfg)
+                enriched_job = _enrich_from_detail(job, detail, source_name=self.name)
+                enriched.append(_apply_url_freshness(enriched_job, status_code=200, checked_at=checked_at))
+            else:
+                # Non-200 with classify=OK (e.g. empty/short body not matching
+                # block markers). _apply_url_freshness: other non-200 → preserve
+                # prior signal (3xx, 429, other 4xx, 5xx are transient unknowns).
+                enriched.append(_apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at))
 
         return enriched, halt
 

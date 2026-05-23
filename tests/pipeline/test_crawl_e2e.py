@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -5,7 +6,16 @@ import httpx
 import pytest
 import respx
 
-from jma.domain.models import SourceResult, SourceStatus
+from jma.domain.dedup import canonical_id, job_id
+from jma.domain.models import (
+    Experience,
+    Job,
+    Location,
+    Salary,
+    SourceResult,
+    SourceStatus,
+    UrlStatus,
+)
 from jma.pipeline.crawl import run
 from jma.sources.base import JobSource, load_source_config
 from jma.sources.http import AsyncHttpClient
@@ -287,3 +297,128 @@ async def test_cache_rows_tagged_with_source_name(tmp_path: Path) -> None:
         cur = await conn.execute("SELECT DISTINCT source FROM url_cache")
         sources = [row[0] for row in await cur.fetchall()]
     assert sources == [fake_name], f"Expected source={fake_name!r} but got {sources}"
+
+
+# ---------------------------------------------------------------------------
+# L4: transient 500 on detail must NOT overwrite a previously earned LIVE signal
+# ---------------------------------------------------------------------------
+
+
+def _factory_detail_on(tmp_path: Path):
+    """Like _factory but with detail enrichment enabled."""
+
+    async def _no_sleep(_s: float) -> None:
+        return None
+
+    base_cfg = load_source_config(CFG_PATH)
+    cfg = base_cfg.model_copy(
+        update={"detail": base_cfg.detail.model_copy(update={"enabled": True})}
+    )
+
+    def _make(ac: httpx.AsyncClient, on_fetch, cache_get):
+        http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
+        return TesterHomeSource(
+            cfg=cfg,
+            http=http,
+            data_root=tmp_path,
+            sleep=_no_sleep,
+            on_fetch=on_fetch,
+            cache_get=cache_get,
+        )
+
+    return _make
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_transient_500_does_not_overwrite_prior_live_signal(tmp_path: Path) -> None:
+    """If a row was 'live' yesterday and today's detail returns 500, the
+    persisted row must still be 'live' — verified through the full
+    crawl + storage round trip.
+
+    Note: placed in tests/pipeline/test_crawl_e2e.py (Option B) because the
+    plan's own phrasing says "verified through the full crawl + storage round
+    trip" — that is pipeline-level behaviour, not a source-unit concern. The
+    existing source tests in test_testerhome_with_detail.py do not touch storage,
+    so adding DB assertions there would require significant new setup. Here we
+    reuse the established open_db + insert_jobs + pipeline.crawl.run pattern.
+    """
+    from jma.storage.db import insert_jobs, open_db, start_run
+
+    db_path = tmp_path / "data/jobs.db"
+
+    # The listing_ok.html fixture has topic 100 at Hangzhou.
+    # Compute the job id that the crawler will produce for testerhome:/topics/100.
+    pre_job_id = job_id(source="testerhome", internal_id="100", title="", company=None, city=None)
+    yesterday = datetime.now(UTC) - timedelta(days=1)
+
+    # Pre-populate the DB with a LIVE row for that job so we can verify it's preserved.
+    pre_job = Job(
+        id=pre_job_id,
+        canonical_id=canonical_id(title="AI Agent Engineer", company=None, city="Hangzhou"),
+        source="testerhome",
+        source_internal_id="100",
+        title="AI Agent Engineer",
+        title_raw="【杭州·余杭】AI Agent Engineer 15-30K·14薪",
+        company=None,
+        location=Location(city="Hangzhou"),
+        salary=Salary(),
+        experience=Experience(),
+        fetched_at=yesterday,
+        url="https://testerhome.com/topics/100",
+        raw_payload_ref="raw/testerhome/placeholder.html.gz",
+        url_status=UrlStatus.LIVE,
+        url_last_checked_at=yesterday,
+    )
+
+    ctx = await open_db(db_path)
+    async with ctx as db:
+        run_id_pre = await start_run(db, region="Hangzhou", keywords=("AI agent",))
+        await insert_jobs(db, run_id_pre, [pre_job])
+
+    # Mock listing returns FIX_OK (topic 100 matches Hangzhou + "AI agent").
+    # Mock listing page 2 as empty so crawl stops.
+    # Mock topic 100 detail as 500 (transient server error).
+    respx.get("https://testerhome.com/jobs?page=1").mock(
+        return_value=httpx.Response(200, text=FIX_OK)
+    )
+    respx.get("https://testerhome.com/jobs?page=2").mock(
+        return_value=httpx.Response(200, text=FIX_EMPTY)
+    )
+    respx.get("https://testerhome.com/topics/100").mock(
+        return_value=httpx.Response(500, text="internal server error")
+    )
+    # Topics 101 and 102 don't match the "AI agent" keyword filter or are Beijing,
+    # but mock them anyway to avoid respx UnmatchedRequest errors.
+    respx.get("https://testerhome.com/topics/102").mock(
+        return_value=httpx.Response(500, text="internal server error")
+    )
+
+    await run(
+        region="Hangzhou",
+        keywords=("AI agent",),
+        source_factory=_factory_detail_on(tmp_path),
+        db_path=db_path,
+        data_root=tmp_path,
+        max_pages=2,
+        max_jobs=100,
+        use_cache=False,
+    )
+
+    # After the crawl, the DB row for topic 100 must still reflect LIVE status.
+    async with aiosqlite.connect(str(db_path)) as conn:
+        cur = await conn.execute(
+            "SELECT url_status, url_last_checked_at FROM jobs WHERE id=?",
+            (pre_job_id,),
+        )
+        row = await cur.fetchone()
+
+    assert row is not None, f"Job {pre_job_id} not found in DB after crawl"
+    url_status, url_last_checked_at = row
+    assert url_status == "live", (
+        f"Expected url_status='live' but got {url_status!r}. "
+        "A transient 500 must not erase an earned LIVE signal."
+    )
+    assert url_last_checked_at == yesterday.isoformat(), (
+        f"url_last_checked_at must not change on transient 500; got {url_last_checked_at!r}"
+    )
