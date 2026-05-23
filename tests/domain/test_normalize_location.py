@@ -159,9 +159,9 @@ def test_paren_parttime_falls_through_to_base_prefix_shenzhen() -> None:
 
 
 def test_paren_parttime_or_intern_falls_through_to_base_prefix_guangzhou() -> None:
-    # （兼职/实习）— the slash is inside the parens; the paren probe captures
-    # only the leading CJK run via its [一-鿿]{2,4} shape, but "兼职" is not a
-    # city. Base-prefix probe must win.
+    # （兼职/实习）— after NFKC normalisation the slash inside the parens
+    # prevents the paren regex ([一-鿿]{2,4}) from matching at all, so the paren
+    # probe produces no match. The base-prefix probe wins directly.
     loc = parse_location("（兼职/实习）后端 base 广州")
     assert loc.city == "Guangzhou"
     assert loc.country == "CN"

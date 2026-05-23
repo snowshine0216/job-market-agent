@@ -196,8 +196,6 @@ def _build_location(
     city_native = city_native.strip()
     if city_native == "":
         return Location(work_mode=work_mode)
-    if city_native in _REMOTE_TOKENS_CN:
-        return Location(work_mode=WorkMode.REMOTE)
     city = _CITY_PINYIN.get(city_native)
     if city is None:
         return Location(country="CN", city=None, district=None, work_mode=work_mode)
@@ -218,12 +216,21 @@ def _resolve_native_city(
 
     "First-known-city wins": this replaces the previous "first shape-match
     wins" rule from ADR 0003. See ADR 0004.
+
+    REMOTE sentinel: returns Location(country="CN", work_mode=REMOTE) when
+    the captured token is 远程. If the caller already has REMOTE or HYBRID
+    work_mode, that is preserved; otherwise we upgrade to REMOTE. country is
+    always "CN" because a shape probe matched (the bracket/paren implies CN
+    context even for a REMOTE job).
     """
     city_native = city_native.strip()
     if city_native == "":
         return None
     if city_native in _REMOTE_TOKENS_CN:
-        return Location(work_mode=WorkMode.REMOTE)
+        resolved_mode = (
+            work_mode if work_mode in (WorkMode.REMOTE, WorkMode.HYBRID) else WorkMode.REMOTE
+        )
+        return Location(country="CN", work_mode=resolved_mode)
     if city_native not in _CITY_PINYIN:
         return None
     return _build_location(city_native, district, work_mode)
@@ -256,39 +263,48 @@ def _try_shape_probe(
     *,
     group: str,
     split_on_middot: bool,
-) -> tuple[Location | None, bool]:
+) -> tuple[Location | None, bool, str | None]:
     """Run one shape probe (bracket / paren / base-prefix) and resolve.
 
-    Returns a (Location | None, matched) tuple where:
+    Returns a (Location | None, matched, captured_text) tuple where:
     - `matched` is True when the pattern's regex matched (even if the
       captured token isn't a known city — i.e. even when Location is None).
     - Location is non-None when the probe matches AND the captured token
       resolves to a known city or REMOTE sentinel.
     - Location is None when the probe doesn't match, OR when it matches
       but the captured token isn't in _CITY_PINYIN — caller falls through.
+    - `captured_text` is the full regex match span text when matched, else
+      None. The caller uses this to excise probe-matched substrings from the
+      string before running bare-scan, preventing street-name false positives
+      like 【北京路】 → Beijing. See ADR 0004 §Subtlety.
 
     `split_on_middot=True` enables the `city·district` split used by
     bracket and paren probes. The base-prefix probe captures only the
     city and additionally runs a progressive-shorter-prefix lookup to
-    handle greedy over-capture like "base 北京工作" → "北京".
+    handle greedy over-capture like "base 北京工作" → "北京". Both bracket/
+    paren and base-prefix route through `_resolve_native_city` so future
+    enrichment (e.g. alias expansion) lands in one place.
     """
     m = pattern.search(s)
     if m is None:
-        return None, False
+        return None, False, None
+    matched_text = m.group(0)
     captured = m[group].strip()
     if split_on_middot:
         parts = [p.strip() for p in captured.split("·") if p.strip()]
         city_native = parts[0] if parts else ""
         district = parts[1] if len(parts) > 1 else None
-        return _resolve_native_city(city_native, district, work_mode), True
+        return _resolve_native_city(city_native, district, work_mode), True, matched_text
     # base-prefix: no district, but try progressive-shorter prefixes so
-    # "base 北京工作" resolves to 北京.
+    # "base 北京工作" resolves to 北京. Route through _resolve_native_city so
+    # future enrichment in that helper applies to base-prefix too.
     for n in range(len(captured), 1, -1):
         prefix = captured[:n]
-        if prefix in _CITY_PINYIN:
-            return _build_location(prefix, None, work_mode), True
+        loc = _resolve_native_city(prefix, None, work_mode)
+        if loc is not None:
+            return loc, True, matched_text
     # Whole capture is not a known-city prefix → fall through.
-    return None, True
+    return None, True, matched_text
 
 
 def parse_location(text: str) -> Location:
@@ -307,21 +323,33 @@ def parse_location(text: str) -> Location:
     # Track whether any shape probe's regex matched (even if it didn't
     # resolve to a known city), so we can preserve country="CN" for titles
     # like 【厦门】 where the shape implies CN even when vocabulary is absent.
+    # Also collect each probe's matched span text to excise from the string
+    # before bare-scan, preventing street-name false positives like
+    # 【北京路】 → Beijing. See ADR 0004 §Subtlety.
     any_shape_matched = False
+    excised_texts: list[str] = []
     for pattern, group, split_on_middot in (
         (_RE_BRACKET, "inside", True),
         (_RE_PAREN, "inside", True),
         (_RE_BASE_PREFIX, "city", False),
     ):
-        loc, matched = _try_shape_probe(
+        loc, matched, captured_text = _try_shape_probe(
             pattern, s, work_mode, group=group, split_on_middot=split_on_middot
         )
         if matched:
             any_shape_matched = True
+            if captured_text is not None:
+                excised_texts.append(captured_text)
         if loc is not None:
             return loc
 
-    bare = _scan_bare_city(s)
+    # Bare-scan on probe-excised string: remove all matched-but-unresolved
+    # probe substrings before scanning, so their internal CJK content cannot
+    # produce false city matches.
+    bare_scan_input = s
+    for text in excised_texts:
+        bare_scan_input = bare_scan_input.replace(text, " ", 1)
+    bare = _scan_bare_city(bare_scan_input)
     if bare is not None:
         return _build_location(bare, None, work_mode)
 
