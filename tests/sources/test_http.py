@@ -78,3 +78,10 @@ async def test_fetch_5xx_exhausts_retries(fake_sleep, sleeps) -> None:
     assert result.status_code == 503
     assert result.attempts == 4
     assert sleeps == [2, 4, 8]  # 2^1, 2^2, 2^3
+
+
+def test_rate_config_default_max_retries_5xx() -> None:
+    """Default 5xx retry budget is 1; default 429 budget stays at 3."""
+    rate = RateConfig()
+    assert rate.max_retries_5xx == 1
+    assert rate.max_retries == 3
