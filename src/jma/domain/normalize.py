@@ -245,7 +245,16 @@ def parse_location(text: str) -> Location:
 
     m = _RE_BASE_PREFIX.search(s)
     if m is not None:
-        return _build_location(m["city"], None, work_mode)
+        candidate = m["city"]
+        # Progressive-shorter-prefix lookup: regex captured 2-4 CJK chars
+        # greedily, but the real city may be a 2-3 char prefix followed by
+        # more CJK (e.g. "base 北京工作" → captured "北京工作"). Resolve to
+        # the longest known city prefix.
+        for n in range(len(candidate), 1, -1):
+            prefix = candidate[:n]
+            if prefix in _CITY_PINYIN:
+                return _build_location(prefix, None, work_mode)
+        return _build_location(candidate, None, work_mode)
 
     bare = _scan_bare_city(s)
     if bare is not None:
