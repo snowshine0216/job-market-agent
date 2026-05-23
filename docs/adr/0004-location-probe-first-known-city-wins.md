@@ -89,3 +89,20 @@ not a fourth copy of the resolution logic.
   `tests/domain/test_normalize_location.py::test_bare_city_at_start`),
   which is what makes `base 团队 招聘 北京站` → Beijing work as a
   consequence of this ADR.
+
+## Subtlety — probe-excised bare-scan
+
+After all shape probes fall through, bare-scan runs on a
+**probe-excised** copy of the string: every substring matched (but not
+resolved) by a shape probe is removed before `_scan_bare_city` is
+called. This prevents the `【北京路】→ Beijing` misattribution, where
+the bracket probe captures `北京路` (a street in Shanghai), fails to
+resolve it, and the old code then let bare-scan find `北京` inside that
+same captured text.
+
+The cost of this rule: `【北京朝阳】` (city + district concatenated
+without a middot separator) no longer falls through to bare-scan and
+resolves to `city=None` instead of Beijing. Mitigation: use
+`【北京·朝阳】` with a middot — the bracket probe's
+`(?:·[一-鿿]{2,6})?` group already handles city·district splitting and
+correctly returns `city=Beijing, district=Chaoyang`.
