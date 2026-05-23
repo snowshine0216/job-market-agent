@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import typer
 
-from jma.domain.models import SourceResult, SourceStatus
+from jma.domain.models import SourceResult, SourceStatus, UrlStatus
 from jma.pipeline.crawl import run as pipeline_run
 from jma.sources.base import JobSource, load_source_config
 from jma.sources.http import AsyncHttpClient
@@ -62,7 +62,13 @@ def _summary_lines(
         n = len(r.jobs)
         total_obs += n
         if r.status is SourceStatus.OK:
-            line = f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}   elapsed={r.elapsed_ms / 1000:.1f}s"
+            line = (
+                f"  {r.source:<11}: ok    pages={r.pages_fetched}  jobs={n}"
+            )
+            if any(j.url_last_checked_at is not None for j in r.jobs):
+                gone = sum(1 for j in r.jobs if j.url_status is UrlStatus.GONE)
+                line += f"   gone_urls={gone}"
+            line += f"   elapsed={r.elapsed_ms / 1000:.1f}s"
             if r.reason.startswith("partial:"):
                 line += f"  {r.reason}"
             lines.append(line)
