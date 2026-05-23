@@ -81,7 +81,7 @@ Pure functions in `domain/`; effects live at the edges (`sources/`, `storage/`).
 
 Self-contained HTML diagrams in `docs/diagrams/`:
 
-- [current-workflow.html](docs/diagrams/current-workflow.html) — the implemented Phase-0/1 crawl pipeline (cli → pipeline → source → storage).
+- [phase-1-testerhome-crawl.html](docs/diagrams/phase-1-testerhome-crawl.html) — the implemented Phase-0/1 crawl pipeline (cli → pipeline → source → storage).
 - [plan-phases-workflow.html](docs/diagrams/plan-phases-workflow.html) — the full multi-phase plan from [PLAN.md](PLAN.md), showing where the current slice sits.
 
 Open in a browser to see the rendered flow. Keep these in sync when the pipeline shape changes (new source, new stage, new storage layer).

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jma Database Schema</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #a78bfa;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle {
+      background: transparent; border: none; color: #475569;
+      cursor: pointer; font-size: 1.25rem; line-height: 1;
+      padding: 0.25rem 0.5rem; border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>jma — Database Schema</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">SQLite (WAL) at data/jobs.db + gzipped raw HTML blobs on disk — built by src/jma/storage/db.py</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1200 920">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowFK" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowRef" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Title row -->
+        <text x="40" y="40" fill="#a78bfa" font-size="11" font-weight="600">SQLite — data/jobs.db (PRAGMA journal_mode=WAL, foreign_keys=ON)</text>
+
+        <!-- Connection arrows (drawn early so they render behind boxes) -->
+        <!-- run_jobs.run_id → runs.id -->
+        <line x1="180" y1="220" x2="180" y2="438" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="0" marker-end="url(#arrowFK)"/>
+        <!-- run_jobs.job_id → jobs.id -->
+        <line x1="280" y1="500" x2="510" y2="500" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowFK)"/>
+
+        <!-- jobs.raw_payload_ref → raw blobs -->
+        <line x1="700" y1="830" x2="700" y2="855" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowRef)"/>
+        <!-- url_cache.blob_ref → raw blobs -->
+        <path d="M 1020 240 C 1020 600, 1010 820, 870 855" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowRef)"/>
+
+        <!-- ======================================================
+             TABLE: runs (top-left)
+             ====================================================== -->
+        <rect x="40" y="70" width="280" height="150" rx="6" fill="#0f172a"/>
+        <rect x="40" y="70" width="280" height="150" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="180" y="92" fill="white" font-size="13" font-weight="700" text-anchor="middle">runs</text>
+        <text x="180" y="106" fill="#a78bfa" font-size="8" text-anchor="middle">one row per `jma crawl` invocation</text>
+        <line x1="50" y1="114" x2="310" y2="114" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
+
+        <text x="56" y="130" fill="#fbbf24" font-size="9" font-weight="600">PK</text>
+        <text x="86" y="130" fill="white" font-size="9">id</text>
+        <text x="200" y="130" fill="#94a3b8" font-size="8">TEXT (uuid hex)</text>
+
+        <text x="86" y="145" fill="white" font-size="9">region</text>
+        <text x="200" y="145" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+
+        <text x="86" y="160" fill="white" font-size="9">keywords_json</text>
+        <text x="200" y="160" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+
+        <text x="86" y="175" fill="white" font-size="9">started_at</text>
+        <text x="200" y="175" fill="#94a3b8" font-size="8">TEXT (ISO-8601 UTC)</text>
+
+        <text x="86" y="190" fill="white" font-size="9">finished_at</text>
+        <text x="200" y="190" fill="#94a3b8" font-size="8">TEXT, nullable</text>
+
+        <text x="86" y="205" fill="white" font-size="9">source_results_json</text>
+        <text x="200" y="205" fill="#94a3b8" font-size="8">TEXT, nullable</text>
+
+        <text x="56" y="218" fill="#22d3ee" font-size="7">idx (region, started_at)</text>
+
+        <!-- ======================================================
+             TABLE: run_jobs (junction, mid-left)
+             ====================================================== -->
+        <rect x="40" y="440" width="280" height="120" rx="6" fill="#0f172a"/>
+        <rect x="40" y="440" width="280" height="120" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="180" y="462" fill="white" font-size="13" font-weight="700" text-anchor="middle">run_jobs</text>
+        <text x="180" y="476" fill="#a78bfa" font-size="8" text-anchor="middle">junction: many runs ↔ many jobs</text>
+        <line x1="50" y1="484" x2="310" y2="484" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
+
+        <text x="56" y="500" fill="#fbbf24" font-size="9" font-weight="600">PK</text>
+        <text x="86" y="500" fill="white" font-size="9">run_id</text>
+        <text x="200" y="500" fill="#fb7185" font-size="8">FK → runs.id</text>
+
+        <text x="56" y="515" fill="#fbbf24" font-size="9" font-weight="600">PK</text>
+        <text x="86" y="515" fill="white" font-size="9">job_id</text>
+        <text x="200" y="515" fill="#fb7185" font-size="8">FK → jobs.id</text>
+
+        <text x="56" y="540" fill="#22d3ee" font-size="7">idx (job_id)</text>
+        <text x="56" y="552" fill="#94a3b8" font-size="7">INSERT OR IGNORE on duplicate (run, job)</text>
+
+        <!-- ======================================================
+             TABLE: jobs (center, the big one)
+             ====================================================== -->
+        <rect x="380" y="70" width="500" height="760" rx="6" fill="#0f172a"/>
+        <rect x="380" y="70" width="500" height="760" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="630" y="92" fill="white" font-size="14" font-weight="700" text-anchor="middle">jobs</text>
+        <text x="630" y="108" fill="#a78bfa" font-size="9" text-anchor="middle">one JobObservation per (source, internal_id) — ADR-0001 dedup</text>
+        <line x1="392" y1="118" x2="868" y2="118" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
+
+        <!-- Identity column group -->
+        <text x="400" y="135" fill="#fbbf24" font-size="8" font-weight="600">─ identity ─</text>
+        <text x="408" y="150" fill="#fbbf24" font-size="9" font-weight="600">PK</text>
+        <text x="440" y="150" fill="white" font-size="9">id</text>
+        <text x="600" y="150" fill="#94a3b8" font-size="8">sha1("source:internal_id")</text>
+
+        <text x="440" y="165" fill="white" font-size="9">canonical_id</text>
+        <text x="600" y="165" fill="#34d399" font-size="8">sha1(title|company|city) — cross-source</text>
+
+        <text x="440" y="180" fill="white" font-size="9">source</text>
+        <text x="600" y="180" fill="#94a3b8" font-size="8">TEXT (e.g. "testerhome")</text>
+
+        <text x="440" y="195" fill="white" font-size="9">source_internal_id</text>
+        <text x="600" y="195" fill="#94a3b8" font-size="8">TEXT, nullable</text>
+
+        <!-- Posting column group -->
+        <text x="400" y="220" fill="#fbbf24" font-size="8" font-weight="600">─ posting ─</text>
+        <text x="440" y="235" fill="white" font-size="9">title</text>
+        <text x="600" y="235" fill="#94a3b8" font-size="8">salary tokens stripped</text>
+        <text x="440" y="250" fill="white" font-size="9">title_raw</text>
+        <text x="600" y="250" fill="#94a3b8" font-size="8">as scraped</text>
+        <text x="440" y="265" fill="white" font-size="9">company</text>
+        <text x="600" y="265" fill="#94a3b8" font-size="8">TEXT, nullable (detail-only)</text>
+
+        <!-- Location column group -->
+        <text x="400" y="290" fill="#fbbf24" font-size="8" font-weight="600">─ location ─</text>
+        <text x="440" y="305" fill="white" font-size="9">location_country</text>
+        <text x="600" y="305" fill="#94a3b8" font-size="8">TEXT, nullable</text>
+        <text x="440" y="320" fill="white" font-size="9">location_city</text>
+        <text x="600" y="320" fill="#94a3b8" font-size="8">TEXT (pinyin), nullable</text>
+        <text x="440" y="335" fill="white" font-size="9">location_district</text>
+        <text x="600" y="335" fill="#94a3b8" font-size="8">TEXT, nullable</text>
+        <text x="440" y="350" fill="white" font-size="9">location_work_mode</text>
+        <text x="600" y="350" fill="#94a3b8" font-size="8">onsite | remote | hybrid | unknown</text>
+
+        <!-- Salary column group -->
+        <text x="400" y="375" fill="#fbbf24" font-size="8" font-weight="600">─ salary ─</text>
+        <text x="440" y="390" fill="white" font-size="9">salary_min</text>
+        <text x="600" y="390" fill="#94a3b8" font-size="8">INTEGER (CNY/month), nullable</text>
+        <text x="440" y="405" fill="white" font-size="9">salary_max</text>
+        <text x="600" y="405" fill="#94a3b8" font-size="8">INTEGER, nullable</text>
+        <text x="440" y="420" fill="white" font-size="9">salary_currency</text>
+        <text x="600" y="420" fill="#94a3b8" font-size="8">"CNY" | "USD" | NULL</text>
+        <text x="440" y="435" fill="white" font-size="9">salary_period</text>
+        <text x="600" y="435" fill="#94a3b8" font-size="8">monthly | annual | daily | hourly</text>
+        <text x="440" y="450" fill="white" font-size="9">salary_months_per_year</text>
+        <text x="600" y="450" fill="#94a3b8" font-size="8">INTEGER, nullable</text>
+        <text x="440" y="465" fill="white" font-size="9">salary_raw</text>
+        <text x="600" y="465" fill="#94a3b8" font-size="8">TEXT NOT NULL DEFAULT ''</text>
+        <text x="440" y="480" fill="white" font-size="9">salary_parsed</text>
+        <text x="600" y="480" fill="#94a3b8" font-size="8">INTEGER (0/1) — disclosure flag</text>
+
+        <!-- Experience -->
+        <text x="400" y="505" fill="#fbbf24" font-size="8" font-weight="600">─ experience ─</text>
+        <text x="440" y="520" fill="white" font-size="9">experience_min_years</text>
+        <text x="600" y="520" fill="#94a3b8" font-size="8">INTEGER, nullable</text>
+        <text x="440" y="535" fill="white" font-size="9">experience_max_years</text>
+        <text x="600" y="535" fill="#94a3b8" font-size="8">INTEGER, nullable</text>
+        <text x="440" y="550" fill="white" font-size="9">experience_raw</text>
+        <text x="600" y="550" fill="#94a3b8" font-size="8">TEXT NOT NULL DEFAULT ''</text>
+
+        <!-- Skills -->
+        <text x="400" y="575" fill="#fbbf24" font-size="8" font-weight="600">─ skills / content ─</text>
+        <text x="440" y="590" fill="white" font-size="9">skills_raw_json</text>
+        <text x="600" y="590" fill="#94a3b8" font-size="8">TEXT DEFAULT '[]'</text>
+        <text x="440" y="605" fill="white" font-size="9">skills_canonical_json</text>
+        <text x="600" y="605" fill="#94a3b8" font-size="8">TEXT DEFAULT '[]'</text>
+        <text x="440" y="620" fill="white" font-size="9">seniority</text>
+        <text x="600" y="620" fill="#94a3b8" font-size="8">junior|mid|senior|staff|lead|unk</text>
+        <text x="440" y="635" fill="white" font-size="9">responsibilities_summary</text>
+        <text x="600" y="635" fill="#94a3b8" font-size="8">TEXT DEFAULT ''</text>
+        <text x="440" y="650" fill="white" font-size="9">description_text</text>
+        <text x="600" y="650" fill="#94a3b8" font-size="8">TEXT DEFAULT ''</text>
+
+        <!-- Provenance + freshness -->
+        <text x="400" y="675" fill="#fbbf24" font-size="8" font-weight="600">─ provenance / freshness (ADR-0003) ─</text>
+        <text x="440" y="690" fill="white" font-size="9">posted_at</text>
+        <text x="600" y="690" fill="#94a3b8" font-size="8">TEXT (ISO-8601), nullable</text>
+        <text x="440" y="705" fill="white" font-size="9">fetched_at</text>
+        <text x="600" y="705" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+        <text x="440" y="720" fill="white" font-size="9">url</text>
+        <text x="600" y="720" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+        <text x="440" y="735" fill="white" font-size="9">raw_payload_ref</text>
+        <text x="600" y="735" fill="#fbbf24" font-size="8">→ raw HTML blob path</text>
+        <text x="440" y="750" fill="white" font-size="9">data_quality</text>
+        <text x="600" y="750" fill="#94a3b8" font-size="8">REAL DEFAULT 1.0</text>
+        <text x="440" y="765" fill="white" font-size="9">url_status</text>
+        <text x="600" y="765" fill="#fb7185" font-size="8">live | gone | unknown</text>
+        <text x="440" y="780" fill="white" font-size="9">url_last_checked_at</text>
+        <text x="600" y="780" fill="#94a3b8" font-size="8">TEXT (ISO-8601), nullable</text>
+        <text x="440" y="795" fill="#fb7185" font-size="7" font-style="italic">UPSERT preserves earned signal</text>
+
+        <!-- Indexes badge -->
+        <text x="400" y="818" fill="#22d3ee" font-size="7">idx canonical_id · source · fetched_at · location_city</text>
+
+        <!-- ======================================================
+             TABLE: url_cache (top-right)
+             ====================================================== -->
+        <rect x="920" y="70" width="240" height="170" rx="6" fill="#0f172a"/>
+        <rect x="920" y="70" width="240" height="170" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1040" y="92" fill="white" font-size="13" font-weight="700" text-anchor="middle">url_cache</text>
+        <text x="1040" y="106" fill="#a78bfa" font-size="8" text-anchor="middle">24h TTL — see cache.py</text>
+        <line x1="930" y1="114" x2="1150" y2="114" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
+
+        <text x="936" y="130" fill="#fbbf24" font-size="9" font-weight="600">PK</text>
+        <text x="966" y="130" fill="white" font-size="9">url_sha1</text>
+        <text x="1060" y="130" fill="#94a3b8" font-size="8">TEXT</text>
+
+        <text x="966" y="145" fill="white" font-size="9">url</text>
+        <text x="1060" y="145" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+
+        <text x="966" y="160" fill="white" font-size="9">source</text>
+        <text x="1060" y="160" fill="#94a3b8" font-size="8">TEXT NOT NULL</text>
+
+        <text x="966" y="175" fill="white" font-size="9">fetched_at</text>
+        <text x="1060" y="175" fill="#94a3b8" font-size="8">TEXT (ISO-8601 UTC)</text>
+
+        <text x="966" y="190" fill="white" font-size="9">status_code</text>
+        <text x="1060" y="190" fill="#94a3b8" font-size="8">INTEGER NOT NULL</text>
+
+        <text x="966" y="205" fill="white" font-size="9">blob_ref</text>
+        <text x="1060" y="205" fill="#fbbf24" font-size="8">→ raw HTML blob, nullable</text>
+
+        <text x="936" y="225" fill="#22d3ee" font-size="7">idx (fetched_at)</text>
+        <text x="936" y="235" fill="#94a3b8" font-size="7">INSERT OR REPLACE on hit</text>
+
+        <!-- ======================================================
+             FILESYSTEM BLOBS (bottom)
+             ====================================================== -->
+        <rect x="380" y="855" width="500" height="50" rx="6" fill="#0f172a"/>
+        <rect x="380" y="855" width="500" height="50" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="630" y="875" fill="white" font-size="12" font-weight="700" text-anchor="middle">data/raw/{source}/{yyyymmdd}/{sha1(url)[:16]}.html.gz</text>
+        <text x="630" y="893" fill="#fbbf24" font-size="9" text-anchor="middle">gzipped raw HTML — written by storage/blobs.py — referenced by string path</text>
+
+        <!-- Legend -->
+        <text x="60" y="620" fill="white" font-size="10" font-weight="600">Legend</text>
+        <rect x="60" y="632" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="82" y="640" fill="#94a3b8" font-size="8">SQLite table</text>
+        <rect x="60" y="648" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="82" y="656" fill="#94a3b8" font-size="8">Filesystem blob</text>
+        <line x1="60" y1="668" x2="76" y2="668" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="82" y="671" fill="#94a3b8" font-size="8">Declared FK</text>
+        <line x1="60" y1="680" x2="76" y2="680" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="3,2"/>
+        <text x="82" y="683" fill="#94a3b8" font-size="8">String path ref</text>
+        <text x="60" y="700" fill="#fbbf24" font-size="8" font-weight="600">PK</text>
+        <text x="82" y="700" fill="#94a3b8" font-size="8">primary key</text>
+        <text x="60" y="713" fill="#fb7185" font-size="8" font-weight="600">FK</text>
+        <text x="82" y="713" fill="#94a3b8" font-size="8">foreign key</text>
+        <text x="60" y="726" fill="#22d3ee" font-size="8" font-weight="600">idx</text>
+        <text x="82" y="726" fill="#94a3b8" font-size="8">index</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Dedup model (ADR-0001)</h3>
+        </div>
+        <ul>
+          <li>• <strong>id</strong> = sha1("source:internal_id") — per-source JobObservation</li>
+          <li>• <strong>canonical_id</strong> = sha1(normalize(title|company|city)) — cross-source Job</li>
+          <li>• Same Job seen via two sources → two rows, shared canonical_id</li>
+          <li>• Aggregations over "Jobs" MUST `GROUP BY canonical_id`</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>Run lifecycle (ADR-0002)</h3>
+        </div>
+        <ul>
+          <li>• Every `jma crawl` = one new runs row (uuid hex)</li>
+          <li>• Same (region, keywords) twice = two Runs</li>
+          <li>• pipeline.crawl.run always calls finish_run (even on exception)</li>
+          <li>• No row left with finished_at IS NULL</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>URL freshness (ADR-0003)</h3>
+        </div>
+        <ul>
+          <li>• jobs.url_status: live / gone / unknown</li>
+          <li>• 200 → LIVE · 404/410 → GONE · others → preserve</li>
+          <li>• UPSERT keeps earned signal: 'unknown' never clobbers 'live'/'gone'</li>
+          <li>• url_cache.blob_ref + jobs.raw_payload_ref both point at the same .html.gz files</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      jma — Phase 1 storage schema · src/jma/storage/db.py · WAL mode, foreign_keys=ON
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'database-schema.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('database-schema.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
