@@ -4,7 +4,7 @@ Mode: plan · N=1 · PR shape: A · Project type: non-web
 
 | id  | spec | grill | plan | branch | impl | drift | ship | verify | pr-review | fix | merge |
 |-----|------|-------|------|--------|------|-------|------|--------|-----------|-----|-------|
-| 001 | ⏭️    | ⏭️     | ⏭️    | ⏳     | ⏳   | ⏳    | ⏳   | ⏳     | ⏳        | ⏳  | ⏳    |
+| 001 | ⏭️    | ⏭️     | ⏭️    | ✅     | ✅   | ✅    | ✅   | ✅     | ✅        | ✅  | ✅    |
 
 Legend: ⏭️ skipped (plan mode pre-completed) · ⏳ pending · 🟡 in-progress · ✅ done · ❌ blocked
 
@@ -12,8 +12,8 @@ Legend: ⏭️ skipped (plan mode pre-completed) · ⏳ pending · 🟡 in-progr
 
 - [x] Phase 0 — intake + mode detection
 - [x] Phase 1 — design artifacts written
-- [ ] Phase 2 — per-item loop
-- [ ] Phase 3 — final validation + doc-sync + close-out
+- [x] Phase 2 — per-item loop (PR #15 merged at `34bab1f` into feature branch)
+- [x] Phase 3 — final validation + doc-sync + close-out
 
 ## Notes
 
