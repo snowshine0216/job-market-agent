@@ -9,27 +9,38 @@ def test_job_id_deterministic_with_internal_id() -> None:
 
 def test_job_id_source_scoped() -> None:
     a = job_id(source="testerhome", internal_id="123", title="X", company="Y", city="Hangzhou")
-    b = job_id(source="bing:zhaopin.com", internal_id="123", title="X", company="Y", city="Hangzhou")
+    b = job_id(
+        source="bing:zhaopin.com", internal_id="123", title="X", company="Y", city="Hangzhou"
+    )
     assert a != b
 
 
 def test_job_id_fallback_when_internal_id_missing() -> None:
-    a = job_id(source="testerhome", internal_id=None,
-               title="AI Engineer", company="Foo", city="Hangzhou")
-    b = job_id(source="testerhome", internal_id="",
-               title="AI Engineer", company="Foo", city="Hangzhou")
+    a = job_id(
+        source="testerhome", internal_id=None, title="AI Engineer", company="Foo", city="Hangzhou"
+    )
+    b = job_id(
+        source="testerhome", internal_id="", title="AI Engineer", company="Foo", city="Hangzhou"
+    )
     assert a == b  # both fall back to title|company|city
-    c = job_id(source="testerhome", internal_id=None,
-               title="AI Engineer", company="Foo", city="Shanghai")
+    c = job_id(
+        source="testerhome", internal_id=None, title="AI Engineer", company="Foo", city="Shanghai"
+    )
     assert a != c
 
 
 def test_job_id_fallback_nfkc_and_whitespace_collapse() -> None:
     # Full-width title + extra whitespace should collapse to the same id.
-    a = job_id(source="testerhome", internal_id=None,
-               title="AI Engineer", company="Foo", city="Hangzhou")
-    b = job_id(source="testerhome", internal_id=None,
-               title="ＡＩ  Engineer", company="foo", city=" Hangzhou ")
+    a = job_id(
+        source="testerhome", internal_id=None, title="AI Engineer", company="Foo", city="Hangzhou"
+    )
+    b = job_id(
+        source="testerhome",
+        internal_id=None,
+        title="ＡＩ  Engineer",
+        company="foo",
+        city=" Hangzhou ",
+    )
     assert a == b
 
 

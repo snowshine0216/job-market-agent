@@ -1,4 +1,5 @@
 """24h URL cache (spec §5 cache TTL)."""
+
 from __future__ import annotations
 
 import hashlib

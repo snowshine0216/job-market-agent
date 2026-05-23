@@ -1,4 +1,5 @@
 """Gzipped raw-HTML blobs at data/raw/{source}/{yyyymmdd}/{sha1(url)[:16]}.html.gz."""
+
 from __future__ import annotations
 
 import gzip

@@ -60,8 +60,15 @@ def test_salary_defaults() -> None:
 
 
 def test_salary_disclosure_three_way() -> None:
-    parseable = Salary(min=15000, max=30000, currency="CNY", period=SalaryPeriod.MONTHLY,
-                       months_per_year=14, raw="15-30K·14薪", parsed=True)
+    parseable = Salary(
+        min=15000,
+        max=30000,
+        currency="CNY",
+        period=SalaryPeriod.MONTHLY,
+        months_per_year=14,
+        raw="15-30K·14薪",
+        parsed=True,
+    )
     unparseable = Salary(raw="面议")
     absent = Salary()
     assert parseable.disclosure == "parseable"

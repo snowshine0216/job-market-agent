@@ -1,4 +1,5 @@
 """JobSource Protocol + SourceConfig loader (spec §7.1, §7.2)."""
+
 from __future__ import annotations
 
 from pathlib import Path
