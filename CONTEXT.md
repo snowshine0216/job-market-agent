@@ -152,3 +152,31 @@ for the parser precedence rules.
 `work_mode` is independent of city: a posting can be both
 `city="Beijing"` and `work_mode=REMOTE` if it's a Beijing-anchored
 remote role.
+
+## URL freshness
+
+A [[JobObservation]]'s `url` is captured at listing time and persists in
+the DB forever — but the underlying forum post can be deleted by the
+author (e.g. when the role is filled). `url_status` records the
+**durable best-known truth** about whether the URL still resolves, not
+the most recent raw HTTP outcome:
+
+- `live` — the last detail-fetch returned 200.
+- `gone` — the last detail-fetch returned 404 or 410. Aggregations
+  filter on `url_status='gone'` to discount or drop these rows. (5xx
+  is *not* in this set: a server outage is not evidence that a post
+  was deleted — see [ADR 0003](docs/adr/0003-url-freshness-as-durable-signal.md).)
+- `unknown` — the URL has never been verified. Either the row was
+  inserted from a listing-only crawl, or every detail-fetch attempt
+  so far returned a transient outcome (3xx, 429, 5xx, network error).
+
+`url_last_checked_at` is the UTC timestamp of the last detail-fetch
+that produced a *definitive* outcome (200 / 404 / 410). Transient
+outcomes never write either field — they preserve whatever signal we
+last earned. A row whose `url_last_checked_at IS NULL` has never been
+verified; aggregation queries should treat such rows differently from
+those that were verified in the past and may have drifted.
+
+Listing-only crawls (default `jma crawl`, no `--with-detail`) do not
+update freshness for any row. To detect stale URLs, run with
+`--with-detail`.

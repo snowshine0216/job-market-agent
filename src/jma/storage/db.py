@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     fetched_at               TEXT NOT NULL,
     url                      TEXT NOT NULL,
     raw_payload_ref          TEXT NOT NULL,
-    data_quality             REAL NOT NULL DEFAULT 1.0
+    data_quality             REAL NOT NULL DEFAULT 1.0,
+    url_status               TEXT NOT NULL DEFAULT 'unknown',
+    url_last_checked_at      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_canonical   ON jobs(canonical_id);
@@ -100,11 +102,33 @@ class _DbContext:
         await self._conn.close()
 
 
+_JOBS_MIGRATIONS: tuple[str, ...] = (
+    "ALTER TABLE jobs ADD COLUMN url_status TEXT NOT NULL DEFAULT 'unknown'",
+    "ALTER TABLE jobs ADD COLUMN url_last_checked_at TEXT",
+)
+
+
+async def _apply_jobs_migrations(conn: aiosqlite.Connection) -> None:
+    """Idempotent column additions for existing DBs. SQLite has no
+    IF NOT EXISTS for ALTER TABLE ADD COLUMN, so we swallow the
+    duplicate-column error."""
+    import sqlite3
+
+    for stmt in _JOBS_MIGRATIONS:
+        try:
+            await conn.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+    await conn.commit()
+
+
 async def open_db(path: str | Path) -> _DbContext:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = await aiosqlite.connect(str(p))
     await conn.executescript(_DDL)
+    await _apply_jobs_migrations(conn)
     return _DbContext(conn)
 
 
@@ -177,11 +201,19 @@ def _job_to_row(j: Job) -> tuple:
         j.url,
         j.raw_payload_ref,
         j.data_quality,
+        j.url_status.value,
+        j.url_last_checked_at.isoformat() if j.url_last_checked_at else None,
     )
 
 
+# NOTE: see docs/adr/0003-url-freshness-as-durable-signal.md.
+# All non-freshness columns use latest-wins (excluded.X). The two
+# freshness columns are conditional: a transient re-insert (where
+# url_status is 'unknown') must NOT overwrite a previously earned
+# 'live'/'gone' signal. The broader "merge by confidence" question
+# for company / salary / etc. is a tracked follow-up (see ADR).
 _INSERT_JOB = """
-INSERT OR REPLACE INTO jobs (
+INSERT INTO jobs (
   id, canonical_id, source, source_internal_id,
   title, title_raw, company,
   location_country, location_city, location_district, location_work_mode,
@@ -190,8 +222,48 @@ INSERT OR REPLACE INTO jobs (
   experience_min_years, experience_max_years, experience_raw,
   skills_raw_json, skills_canonical_json,
   seniority, responsibilities_summary, description_text,
-  posted_at, fetched_at, url, raw_payload_ref, data_quality
-) VALUES (?,?,?,?, ?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?,?)
+  posted_at, fetched_at, url, raw_payload_ref, data_quality,
+  url_status, url_last_checked_at
+) VALUES (?,?,?,?, ?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?, ?,?,?, ?,?, ?,?,?, ?,?,?,?,?, ?,?)
+ON CONFLICT(id) DO UPDATE SET
+  canonical_id             = excluded.canonical_id,
+  source                   = excluded.source,
+  source_internal_id       = excluded.source_internal_id,
+  title                    = excluded.title,
+  title_raw                = excluded.title_raw,
+  company                  = excluded.company,
+  location_country         = excluded.location_country,
+  location_city            = excluded.location_city,
+  location_district        = excluded.location_district,
+  location_work_mode       = excluded.location_work_mode,
+  salary_min               = excluded.salary_min,
+  salary_max               = excluded.salary_max,
+  salary_currency          = excluded.salary_currency,
+  salary_period            = excluded.salary_period,
+  salary_months_per_year   = excluded.salary_months_per_year,
+  salary_raw               = excluded.salary_raw,
+  salary_parsed            = excluded.salary_parsed,
+  experience_min_years     = excluded.experience_min_years,
+  experience_max_years     = excluded.experience_max_years,
+  experience_raw           = excluded.experience_raw,
+  skills_raw_json          = excluded.skills_raw_json,
+  skills_canonical_json    = excluded.skills_canonical_json,
+  seniority                = excluded.seniority,
+  responsibilities_summary = excluded.responsibilities_summary,
+  description_text         = excluded.description_text,
+  posted_at                = excluded.posted_at,
+  fetched_at               = excluded.fetched_at,
+  url                      = excluded.url,
+  raw_payload_ref          = excluded.raw_payload_ref,
+  data_quality             = excluded.data_quality,
+  url_status               = CASE
+      WHEN excluded.url_status IN ('live','gone') THEN excluded.url_status
+      ELSE jobs.url_status
+  END,
+  url_last_checked_at      = CASE
+      WHEN excluded.url_status IN ('live','gone') THEN excluded.url_last_checked_at
+      ELSE jobs.url_last_checked_at
+  END
 """
 
 
