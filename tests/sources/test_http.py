@@ -108,3 +108,22 @@ def test_rate_config_default_max_retries_5xx() -> None:
     rate = RateConfig()
     assert rate.max_retries_5xx == 1
     assert rate.max_retries == 3
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fetch_5xx_respects_explicit_max_retries_5xx(fake_sleep, sleeps) -> None:
+    """An explicit max_retries_5xx overrides the default of 1."""
+    route = respx.get("https://example.com/x")
+    route.side_effect = [httpx.Response(500, text="")] * 4
+    async with httpx.AsyncClient() as ac:
+        client = AsyncHttpClient(
+            ac,
+            rate=RateConfig(max_retries=3, max_retries_5xx=2, backoff_base_s=2),
+            sleep=fake_sleep,
+        )
+        result = await client.fetch("https://example.com/x")
+    assert result.status_code == 500
+    # max_retries_5xx=2 → initial + 2 retries = 3 attempts.
+    assert result.attempts == 3
+    assert sleeps == [2, 4]  # 2^1, 2^2
