@@ -141,6 +141,28 @@ _REMOTE_TOKENS_CN = ("远程",)
 _REMOTE_TOKENS_EN = ("remote",)
 
 
+def _build_location(
+    city_native: str,
+    district: str | None,
+    work_mode: WorkMode,
+) -> Location:
+    """Map a native-Chinese city string to a Location using _CITY_PINYIN.
+
+    Unknown native cities yield city=None, district=None — we do NOT stuff
+    the native form into `district`. See CONTEXT.md (Location) and
+    docs/adr/0003-location-probe-precedence.md.
+    """
+    city_native = city_native.strip()
+    if city_native == "":
+        return Location(work_mode=work_mode)
+    if city_native in _REMOTE_TOKENS_CN:
+        return Location(work_mode=WorkMode.REMOTE)
+    city = _CITY_PINYIN.get(city_native)
+    if city is None:
+        return Location(country="CN", city=None, district=None, work_mode=work_mode)
+    return Location(country="CN", city=city, district=district, work_mode=work_mode)
+
+
 def parse_location(text: str) -> Location:
     if text == "":
         return Location()
@@ -156,15 +178,7 @@ def parse_location(text: str) -> Location:
         return Location(work_mode=work_mode)
 
     inside = m["inside"].strip()
-    # Inside is either "city" or "city·district" or "远程".
-    if inside in _REMOTE_TOKENS_CN:
-        return Location(work_mode=WorkMode.REMOTE)
-
     parts = [p.strip() for p in inside.split("·") if p.strip()]
     city_native = parts[0] if parts else ""
     district = parts[1] if len(parts) > 1 else None
-    city = _CITY_PINYIN.get(city_native)
-    if city is None:
-        # Unknown native city: keep native form in district, leave city blank.
-        return Location(country="CN", city=None, district=city_native, work_mode=work_mode)
-    return Location(country="CN", city=city, district=district, work_mode=work_mode)
+    return _build_location(city_native, district, work_mode)
