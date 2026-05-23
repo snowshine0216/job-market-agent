@@ -75,3 +75,6 @@ data/
 logs/
 tmp/
 temp/
+
+# Claude
+.claude/
