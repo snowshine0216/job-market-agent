@@ -323,32 +323,30 @@ def parse_location(text: str) -> Location:
     # Track whether any shape probe's regex matched (even if it didn't
     # resolve to a known city), so we can preserve country="CN" for titles
     # like 【厦门】 where the shape implies CN even when vocabulary is absent.
-    # Also collect each probe's matched span text to excise from the string
-    # before bare-scan, preventing street-name false positives like
-    # 【北京路】 → Beijing. See ADR 0004 §Subtlety.
     any_shape_matched = False
-    excised_texts: list[str] = []
     for pattern, group, split_on_middot in (
         (_RE_BRACKET, "inside", True),
         (_RE_PAREN, "inside", True),
         (_RE_BASE_PREFIX, "city", False),
     ):
-        loc, matched, captured_text = _try_shape_probe(
+        loc, matched, _ = _try_shape_probe(
             pattern, s, work_mode, group=group, split_on_middot=split_on_middot
         )
         if matched:
             any_shape_matched = True
-            if captured_text is not None:
-                excised_texts.append(captured_text)
         if loc is not None:
             return loc
 
-    # Bare-scan on probe-excised string: remove all matched-but-unresolved
-    # probe substrings before scanning, so their internal CJK content cannot
-    # produce false city matches.
+    # Bare-scan on fully-excised string: remove ALL spans matched by each
+    # shape pattern (not just the first per probe) before scanning. This
+    # prevents a second bracket/paren later in the same title from leaking
+    # its internal CJK content into _scan_bare_city.
+    # Example: 【高级】工程师【北京路】 — the first probe captures 【高级】 and
+    # falls through, but 【北京路】 is a second span that was never fed into a
+    # probe. re.sub removes both before bare-scan. See ADR 0004 §Subtlety.
     bare_scan_input = s
-    for text in excised_texts:
-        bare_scan_input = bare_scan_input.replace(text, " ", 1)
+    for pattern in (_RE_BRACKET, _RE_PAREN, _RE_BASE_PREFIX):
+        bare_scan_input = re.sub(pattern, " ", bare_scan_input)
     bare = _scan_bare_city(bare_scan_input)
     if bare is not None:
         return _build_location(bare, None, work_mode)
