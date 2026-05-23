@@ -141,6 +141,14 @@ _RE_BRACKET = re.compile(r"【\s*(?P<inside>[^】]+?)\s*】")
 # CJK-shaped content — "city" or "city·district" — to avoid mis-firing
 # on English parens like "(Remote)" or "(NYC)". See ADR 0003.
 _RE_PAREN = re.compile(r"[(]\s*(?P<inside>[一-鿿]{2,4}(?:·[一-鿿]{2,6})?)\s*[)]")
+# "base 北京" / "BASE 上海" — 2-4 CJK chars after the keyword.
+# Lookbehind rejects "database", "firebase", "codebase". The `\s+`
+# requires at least one separator (matches real TesterHome usage and
+# keeps "base" from gluing onto an unrelated CJK token).
+_RE_BASE_PREFIX = re.compile(
+    r"(?<![A-Za-z])base\s+(?P<city>[一-鿿]{2,4})",
+    re.IGNORECASE,
+)
 _REMOTE_TOKENS_CN = ("远程",)
 _REMOTE_TOKENS_EN = ("remote",)
 
@@ -180,11 +188,15 @@ def parse_location(text: str) -> Location:
     m = _RE_BRACKET.search(s)
     if m is None:
         m = _RE_PAREN.search(s)
-    if m is None:
-        return Location(work_mode=work_mode)
+    if m is not None:
+        inside = m["inside"].strip()
+        parts = [p.strip() for p in inside.split("·") if p.strip()]
+        city_native = parts[0] if parts else ""
+        district = parts[1] if len(parts) > 1 else None
+        return _build_location(city_native, district, work_mode)
 
-    inside = m["inside"].strip()
-    parts = [p.strip() for p in inside.split("·") if p.strip()]
-    city_native = parts[0] if parts else ""
-    district = parts[1] if len(parts) > 1 else None
-    return _build_location(city_native, district, work_mode)
+    m = _RE_BASE_PREFIX.search(s)
+    if m is not None:
+        return _build_location(m["city"], None, work_mode)
+
+    return Location(work_mode=work_mode)
