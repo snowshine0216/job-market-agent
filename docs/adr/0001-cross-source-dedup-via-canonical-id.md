@@ -17,6 +17,16 @@ Aggregations `GROUP BY canonical_id` and pick the highest
 `data_quality` row per group; INSERT semantics stay dumb
 (`INSERT OR REPLACE` per [[JobObservation]]).
 
+> **Status of `data_quality`.** This column is aspirational and **not
+> yet implemented** as of Phase 1. The `Job` model has no
+> `data_quality` field, and the schema does not store one. Defer
+> introducing it until the first Phase (currently planned: Phase 4
+> reports) that actually needs to choose between rows in a canonical
+> group. In the meantime, ad-hoc consumers use the proxy
+> `company IS NOT NULL AND salary.parsed = TRUE` and accept that
+> detail-fetch parity across sources is uneven. See ADR-0003 for the
+> related question of canonical_id stability under detail-enrichment.
+
 ## Considered options
 
 - **A — Drop `internal_id` from the key entirely** (`id = sha1(title|company|city)`). Cross-source collapse happens at INSERT time. Rejected: loses intra-source disambiguation (two distinct postings collide), and requires conditional UPSERT logic so a low-quality snippet can't overwrite a high-quality full extraction.
