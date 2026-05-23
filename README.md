@@ -45,6 +45,7 @@ uv run jma crawl --region Hangzhou --keywords "AI agent"
 | `--max-pages <int>` | `5` | Stop after this many listing pages. |
 | `--max-jobs <int>` | `300` | Stop after this many observations are collected (truncated to exactly N). |
 | `--no-cache` | off | Skip the 24h URL cache for fetches. Cache rows are still written. |
+| `--with-detail` / `--no-detail` | off | Fetch each job's detail page to populate `company`/`salary` and tag URL freshness (`url_status`). Adds N HTTP calls per listing page; respects `delay_ms`. Default off — listing-only crawls do not check URLs. |
 | `-v` / `--verbose` | off | Lift log level to `DEBUG`. |
 
 ### Example output
@@ -56,6 +57,12 @@ keywords      : AI agent
 sources:
   testerhome  : ok    pages=3  jobs=47   elapsed=4.1s
 written       : 47 observations to data/jobs.db
+```
+
+With `--with-detail`, the summary also reports how many of the just-fetched URLs returned 404/410 (`gone_urls`). Listing-only crawls omit the segment entirely so the operator can distinguish "we didn't check" from "we checked, none gone":
+
+```
+testerhome  : ok    pages=3  jobs=47   gone_urls=2   elapsed=12.6s
 ```
 
 Partial harvest (an earlier page succeeded, a later page was rate-limited):
@@ -101,6 +108,18 @@ Aggregations that summarise "jobs" must `GROUP BY canonical_id`.
 A Run is one CLI invocation. Membership of an observation in a Run lives in
 the `run_jobs` join table — see
 [ADR-0002](docs/adr/0002-run-is-one-invocation-recorded-via-join-table.md).
+
+### URL freshness
+
+When run with `--with-detail`, each job's detail page is fetched and the
+result is recorded on the `jobs` row as `url_status` (`live` / `gone` /
+`unknown`) plus `url_last_checked_at`. Only definitive HTTP outcomes
+(200, 404, 410) update these fields; transient outcomes (3xx, 429, 5xx,
+network errors) preserve whatever signal was last earned, so a flaky
+fetch never erases a previously-confirmed `live` or `gone`. See
+[ADR-0003](docs/adr/0003-url-freshness-as-durable-signal.md) and the
+[CONTEXT.md URL freshness section](CONTEXT.md#url-freshness) for the
+durable-signal model.
 
 ### Inspecting the data
 
@@ -158,7 +177,7 @@ Interactive session:
 
 ```bash
 sqlite3 data/jobs.db
-sqlite> .schema jobs        # all 31 columns
+sqlite> .schema jobs        # all 33 columns
 sqlite> .mode line          # vertical layout, easier to read
 sqlite> SELECT * FROM jobs WHERE location_city = 'Hangzhou' LIMIT 3;
 sqlite> .quit
@@ -210,5 +229,5 @@ src/jma/
 
 - [PLAN.md](PLAN.md) — overall roadmap and decision table.
 - [CONTEXT.md](CONTEXT.md) — glossary (JobObservation vs Job, PartialHarvest, Run, Source).
-- [docs/adr/](docs/adr/) — architectural decisions (dedup model, Run semantics).
+- [docs/adr/](docs/adr/) — architectural decisions (dedup model, Run semantics, URL freshness durable signal).
 - [docs/superpowers/specs/](docs/superpowers/specs/) — implementation specs per phase.
