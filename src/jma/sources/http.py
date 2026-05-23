@@ -1,8 +1,13 @@
 """Async HTTP wrapper with retry/backoff (spec §6 + slice 1.6).
 
 Retry policy:
-- status 429 or >= 500 → retry up to max_retries with exponential backoff
-  (backoff_base_s ** attempt_index, starting at 1).
+- status 429 → retry up to `rate.max_retries` (default 3) with exponential
+  backoff (`backoff_base_s ** attempt_index`, starting at 1).
+- status >= 500 → retry up to `rate.max_retries_5xx` (default 1) with the
+  same exponential backoff curve. Asymmetry is intentional: 429 means
+  "back off, server is rate-limiting" (retry generously); 5xx on a single
+  resource path is overwhelmingly a permanent server-side breakage
+  (retry once for a true transient hiccup, then move on).
 - status 401/403/other non-200 → return immediately (no retry).
 - network errors propagate as httpx exceptions; callers may catch.
 """
@@ -45,10 +50,16 @@ class AsyncHttpClient:
         while True:
             attempts += 1
             resp = await self._client.get(url)
-            should_retry = resp.status_code == 429 or resp.status_code >= 500
-            if not should_retry or attempts > self._rate.max_retries:
+            status = resp.status_code
+            if status == 429:
+                budget = self._rate.max_retries
+            elif status >= 500:
+                budget = self._rate.max_retries_5xx
+            else:
+                budget = 0  # no retry for 2xx/3xx/4xx (excluding 429)
+            if budget == 0 or attempts > budget:
                 return FetchResult(
-                    status_code=resp.status_code,
+                    status_code=status,
                     headers=dict(resp.headers),
                     body=resp.text,
                     attempts=attempts,

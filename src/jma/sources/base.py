@@ -35,6 +35,7 @@ class RateConfig(BaseModel):
     delay_ms: int = 800
     max_retries: int = 3
     backoff_base_s: int = 2
+    max_retries_5xx: int = 1
 
 
 class SourceConfig(BaseModel):
