@@ -34,8 +34,10 @@ def _data_root() -> Path:
     return Path.cwd() / "data"
 
 
-def _factory_for(source_name: str, data_root: Path):
+def _factory_for(source_name: str, data_root: Path, with_detail: bool):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
+    if with_detail:
+        cfg = cfg.model_copy(update={"detail": cfg.detail.model_copy(update={"enabled": True})})
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
         http = AsyncHttpClient(ac, rate=cfg.rate)
@@ -89,6 +91,14 @@ def crawl(
     max_pages: int = typer.Option(5, "--max-pages"),
     max_jobs: int = typer.Option(300, "--max-jobs"),
     no_cache: bool = typer.Option(False, "--no-cache"),
+    with_detail: bool = typer.Option(
+        False,
+        "--with-detail/--no-detail",
+        help=(
+            "Fetch each job's detail page to populate company/salary "
+            "(slower; adds N HTTP calls per page)."
+        ),
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     logging.basicConfig(
@@ -106,7 +116,7 @@ def crawl(
             run_id, results = await pipeline_run(
                 region=region,
                 keywords=keywords_t,
-                source_factory=_factory_for(s_name, data_root),
+                source_factory=_factory_for(s_name, data_root, with_detail=with_detail),
                 db_path=db_path,
                 data_root=data_root,
                 max_pages=max_pages,

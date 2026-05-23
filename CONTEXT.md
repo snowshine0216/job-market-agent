@@ -53,12 +53,19 @@ table.
 ## PartialHarvest
 
 A [[Source]]'s crawl outcome when some [[JobObservation]]s were
-collected but the crawl was cut short by a block on a later page (the
+collected but the crawl was cut short by a block on a later fetch (the
 classifier returned `RATE_LIMITED`, `BLOCKED`, or `ERROR` after at least
 one earlier page succeeded). PartialHarvests are reported as
 `SourceResult(status=OK, reason="partial: stopped at page N (…)", …)`
 — the status describes data usability, the `reason` carries the block
 detail.
+
+"Fetch" here covers both listing pages and per-job detail pages. A
+block tripped during detail-fetch enrichment also converts the crawl
+to a PartialHarvest: the listing data we already have is still useful,
+but we must not poison the URL cache by writing blob/cache rows for
+blocked responses, and we must stop further detail fetches against the
+same wall.
 
 PartialHarvests bias the sample toward early listing pages (which on
 most boards are the freshest postings), so downstream reports should
