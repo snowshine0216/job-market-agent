@@ -1,0 +1,1 @@
+"""Pure-function domain layer."""

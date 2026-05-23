@@ -1,3 +1,6 @@
+# Autodev
+.autodev-current
+
 # Python
 __pycache__/
 *.py[cod]
@@ -24,6 +27,7 @@ share/python-wheels/
 MANIFEST
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
@@ -32,18 +36,10 @@ venv.bak/
 
 # Testing
 .pytest_cache/
+.ruff_cache/
 .coverage
 .tox/
 htmlcov/
-
-# IDE / Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-*.code-workspace
 
 # mypy / type checking
 .mypy_cache/
@@ -55,9 +51,21 @@ dmypy.json
 .env.local
 .env.*.local
 
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Runtime data
+data/
+!data/.gitignore
 
 # Project specific
 .cache/
