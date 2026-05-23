@@ -90,9 +90,7 @@ class TesterHomeSource:
         hit = await self._cache_get(url) if self._cache_get else None
         if hit and hit.status_code == 200 and hit.blob_ref:
             body_text = blobs.read(root=self._root, ref=hit.blob_ref)
-            block = classify(
-                status_code=200, headers={}, body_text=body_text, cfg=self._cfg
-            )
+            block = classify(status_code=200, headers={}, body_text=body_text, cfg=self._cfg)
             return _ClassifiedFetch(
                 status_code=200,
                 headers={},
@@ -133,9 +131,7 @@ class TesterHomeSource:
             block=block,
         )
 
-    async def _enrich_page(
-        self, page_jobs: list[Job]
-    ) -> tuple[list[Job], str | None]:
+    async def _enrich_page(self, page_jobs: list[Job]) -> tuple[list[Job], str | None]:
         """Run detail-fetch enrichment for one page's jobs.
 
         Returns (enriched_jobs, halt_reason). When halt_reason is set
@@ -449,9 +445,7 @@ def _enrich_from_detail(job: Job, detail: dict[str, str], source_name: str) -> J
         # Detail wins unless it would degrade parseable → unparseable.
         if candidate.parsed or not job.salary.parsed:
             new_salary = candidate
-    new_canonical = canonical_id(
-        title=job.title, company=new_company, city=job.location.city
-    )
+    new_canonical = canonical_id(title=job.title, company=new_company, city=job.location.city)
     return job.model_copy(
         update={
             "canonical_id": new_canonical,

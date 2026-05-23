@@ -37,9 +37,7 @@ def _data_root() -> Path:
 def _factory_for(source_name: str, data_root: Path, with_detail: bool):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
     if with_detail:
-        cfg = cfg.model_copy(
-            update={"detail": cfg.detail.model_copy(update={"enabled": True})}
-        )
+        cfg = cfg.model_copy(update={"detail": cfg.detail.model_copy(update={"enabled": True})})
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
         http = AsyncHttpClient(ac, rate=cfg.rate)

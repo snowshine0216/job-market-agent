@@ -96,9 +96,7 @@ def test_enrich_fills_company_and_salary_and_recomputes_canonical_id_only() -> N
 
 def test_enrich_no_op_when_detail_empty() -> None:
     job = _make_listing_job()
-    enriched = _enrich_from_detail(
-        job, {"company": "", "salary_raw": ""}, source_name="testerhome"
-    )
+    enriched = _enrich_from_detail(job, {"company": "", "salary_raw": ""}, source_name="testerhome")
     assert enriched.company is None
     assert enriched.salary == job.salary
     assert enriched.id == job.id
