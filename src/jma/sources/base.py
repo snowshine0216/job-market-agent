@@ -23,6 +23,11 @@ class ListingConfig(BaseModel):
 class DetailConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     body_selector: str
+    enabled: bool = False
+    company_selectors: tuple[str, ...] = ()
+    company_label_patterns: tuple[str, ...] = ()
+    salary_selectors: tuple[str, ...] = ()
+    salary_label_patterns: tuple[str, ...] = ()
 
 
 class RateConfig(BaseModel):

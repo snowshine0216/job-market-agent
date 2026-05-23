@@ -8,6 +8,19 @@ listing:
   posted_at_attr: ".time@title"
 detail:
   body_selector: ".topic-detail .markdown-body"
+  enabled: false                  # opt-in: flip via --with-detail CLI flag
+  company_selectors:
+    - ".topic-detail .markdown-body"   # root for the child-element scan (Task 3)
+  company_label_patterns:
+    - "公司[:：]\\s*(?P<value>[^\\n<]+)"
+    - "公司名称[:：]\\s*(?P<value>[^\\n<]+)"
+    - "招聘公司[:：]\\s*(?P<value>[^\\n<]+)"
+  salary_selectors:
+    - ".topic-detail .markdown-body"
+  salary_label_patterns:
+    - "薪资[:：]\\s*(?P<value>[^\\n<]+)"
+    - "薪资范围[:：]\\s*(?P<value>[^\\n<]+)"
+    - "工资[:：]\\s*(?P<value>[^\\n<]+)"
 requires_browser: false
 content_block_markers: []
 known_good_list_selector: ".topics .topic"
