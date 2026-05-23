@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 
-from jma.domain.normalize import _normalize_for_match
+from jma.domain.normalize import normalize_for_match as _normalize_for_match
 
 
 def _norm(value: str | None) -> str:

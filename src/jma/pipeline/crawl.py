@@ -75,7 +75,7 @@ async def run(
         except Exception as e:  # noqa: BLE001
             # L2: always finish_run so the runs row is never left dangling with NULL finished_at.
             error_result = SourceResult(
-                source="unknown",
+                source=_probe.name,
                 status=SourceStatus.ERROR,
                 reason=f"unhandled exception: {type(e).__name__}: {e}",
             )

@@ -6,8 +6,6 @@ import pytest
 from jma.storage.cache import get, put
 from jma.storage.db import open_db
 
-UTC = UTC
-
 
 @pytest.mark.asyncio
 async def test_put_then_get_fresh(tmp_path: Path) -> None:
