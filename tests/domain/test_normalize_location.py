@@ -247,3 +247,46 @@ def test_remote_sentinel_in_bracket_preserves_country_cn() -> None:
     loc = parse_location("【远程】Backend Engineer")
     assert loc.country == "CN"
     assert loc.work_mode is WorkMode.REMOTE
+
+
+# Issue #10 — P0 regression: multiple bracket/paren spans, only first was excised
+# When a title has MULTIPLE bracket/paren spans and the first doesn't resolve a
+# city, the second span's content must also be excised before bare-scan runs.
+# Previously only the probe-captured (first) match was removed; a second bracket
+# like 【北京路】 survived and bare-scan found "北京" inside it → wrong city.
+# Fix: use re.sub over each shape pattern to excise ALL spans before bare-scan.
+
+
+def test_multiple_brackets_only_first_captured_all_excised_before_bare_scan() -> None:
+    # 【高级】 is not a city (falls through); 【北京路】 is a Shanghai street.
+    # Both bracket spans must be excised before bare-scan, yielding city=None.
+    loc = parse_location("【高级】工程师【北京路】招聘")
+    assert loc.city is None
+
+
+def test_two_non_city_brackets_with_shanghai_street_excised() -> None:
+    # 【资深】 is not a city; 【北京东路招聘】 contains a Shanghai street name.
+    # Both must be excised so bare-scan does not find 北京 inside the second span.
+    loc = parse_location("【资深】QA【北京东路招聘】")
+    assert loc.city is None
+
+
+def test_bracket_plus_paren_both_non_city_remainder_bare_scan_finds_city() -> None:
+    # 【高级】 (bracket) and （资深）(paren) are both non-city shape spans.
+    # Both must be excised; remainder "数据分析师 杭州" contains a real city.
+    loc = parse_location("【高级】（资深）数据分析师 杭州")
+    assert loc.city == "Hangzhou"
+
+
+def test_two_parens_only_first_captured_both_excised() -> None:
+    # （高级）falls through; （北京路）contains a Shanghai street name.
+    # Both paren spans must be excised so bare-scan does not fire on 北京.
+    loc = parse_location("（高级）测试（北京路）招聘")
+    assert loc.city is None
+
+
+def test_existing_paren_excision_regression_guard() -> None:
+    # Regression guard: the existing passing case must still work after the fix.
+    # （高级）is excised; bare-scan on the remainder finds 杭州 in 杭州站点.
+    loc = parse_location("（高级）数据分析师 杭州站点")
+    assert loc.city == "Hangzhou"
