@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>job-market-agent · Current Implementation Workflow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 1320px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>job-market-agent · Current Implementation Workflow</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">Phase 0 + Phase 1 vertical slice — TesterHome crawl → SQLite. Async httpx, pure domain, idempotent storage.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 840">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ═══════════════════════════════════════════════════════════
+             SWIM LANE BACKGROUNDS
+             ═══════════════════════════════════════════════════════════ -->
+
+        <!-- ENTRY lane: y=28–130 -->
+        <rect x="28" y="28" width="1264" height="102" rx="6" fill="rgba(15,23,42,0.55)" stroke="#1e293b" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,79)" x="15" y="79" fill="#334155" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.12em">ENTRY</text>
+
+        <!-- PIPELINE lane: y=138–246 -->
+        <rect x="28" y="138" width="1264" height="108" rx="6" fill="rgba(6,78,59,0.1)" stroke="rgba(52,211,153,0.2)" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,192)" x="15" y="192" fill="#166534" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.12em">PIPELINE</text>
+
+        <!-- SOURCES lane: y=254–410 -->
+        <rect x="28" y="254" width="1264" height="156" rx="6" fill="rgba(15,23,42,0.3)" stroke="#1e293b" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,332)" x="15" y="332" fill="#334155" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.12em">SOURCES</text>
+
+        <!-- DOMAIN lane: y=420–548 -->
+        <rect x="28" y="420" width="1264" height="128" rx="6" fill="rgba(8,51,68,0.12)" stroke="rgba(34,211,238,0.18)" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,484)" x="15" y="484" fill="#0e7490" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.08em">DOMAIN·PURE</text>
+
+        <!-- Domain purity inner dashed boundary -->
+        <rect x="58" y="425" width="892" height="118" rx="8" fill="transparent" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="70" y="440" fill="#22d3ee" font-size="9" font-weight="600">domain/ · PURE · no I/O · no mutation</text>
+
+        <!-- STORAGE lane: y=560–678 -->
+        <rect x="28" y="560" width="1264" height="118" rx="6" fill="rgba(76,29,149,0.09)" stroke="rgba(167,139,250,0.2)" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,619)" x="15" y="619" fill="#4c1d95" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.1em">STORAGE·I/O</text>
+
+        <!-- TESTS lane: y=692–820 -->
+        <rect x="28" y="692" width="1264" height="128" rx="6" fill="rgba(136,19,55,0.08)" stroke="rgba(251,113,133,0.15)" stroke-width="0.5"/>
+        <text transform="rotate(-90,15,756)" x="15" y="756" fill="#9f1239" font-size="7" font-weight="700" text-anchor="middle" letter-spacing="0.08em">TESTS</text>
+        <text x="42" y="700" fill="#7f1d1d" font-size="8" font-weight="500">pytest + pytest-asyncio + respx · CI runs -m "not live"</text>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             ARROWS — drawn behind boxes
+             ═══════════════════════════════════════════════════════════ -->
+
+        <!-- ① asyncio.run: User·CLI → cli.py  [horizontal cyan] -->
+        <line x1="229" y1="79" x2="322" y2="79" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="275" y="71" fill="#94a3b8" font-size="8" text-anchor="middle">asyncio.run</text>
+
+        <!-- cli.py → crawl.py  [down-left, emerald] -->
+        <path d="M404,113 V142 L350,152" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+
+        <!-- crawl.py → testerhome.yaml  [short dashed right] -->
+        <line x1="350" y1="191" x2="400" y2="191" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrowhead)"/>
+        <text x="372" y="184" fill="#94a3b8" font-size="8" text-anchor="middle">load YAML</text>
+
+        <!-- ② fetch on miss: crawl.py → http.py  [vertical, emerald] -->
+        <line x1="180" y1="232" x2="180" y2="265" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="200" y="250" fill="#34d399" font-size="8">2. fetch on miss</text>
+
+        <!-- start_run / finish_run: crawl.py → db.py
+             Travels horizontally at y=250 (inter-lane gap), then drops into storage.
+             y=250 sits between pipeline bottom (246) and sources top (254) — clear of all boxes. -->
+        <path d="M350,194 V250 H1078 V560" fill="none" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrowhead-violet)"/>
+        <text x="714" y="242" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">start_run / finish_run</text>
+
+        <!-- ① seen(url)? 24h cache: crawl.py → cache.py  [left-margin route] -->
+        <path d="M82,200 H44 V619 H300" fill="none" stroke="#a78bfa" stroke-width="1.1" stroke-dasharray="3,3" marker-end="url(#arrowhead-violet)"/>
+        <text transform="rotate(-90,54,440)" x="54" y="440" fill="#a78bfa" font-size="7.5" text-anchor="middle">1. seen(url)? 24h cache</text>
+
+        <!-- httpx GET: http.py → testerhome.com  [long horizontal, emerald] -->
+        <line x1="278" y1="306" x2="706" y2="306" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="492" y="297" fill="#94a3b8" font-size="8" text-anchor="middle">httpx GET (retry / backoff)</text>
+
+        <!-- HTML response: testerhome.com → http.py  [dashed return] -->
+        <line x1="706" y1="326" x2="278" y2="326" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowhead)"/>
+        <text x="492" y="341" fill="#94a3b8" font-size="8" text-anchor="middle">HTML response</text>
+
+        <!-- ③ classify: http.py → blockage.py  [left-offset vertical, rose] -->
+        <line x1="155" y1="374" x2="155" y2="435" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead-rose)"/>
+        <text x="133" y="407" fill="#fb7185" font-size="8" text-anchor="middle">3. classify</text>
+
+        <!-- ④ parse: http.py → testerhome.py  [horizontal right, emerald] -->
+        <line x1="278" y1="325" x2="455" y2="325" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="366" y="315" fill="#94a3b8" font-size="8" text-anchor="middle">4. status==ok → parse</text>
+
+        <!-- gzip raw HTML: http.py → blobs.py
+             Exits http.py at x=252 (right-quarter), steps right to x=282 (gap between blockage/models),
+             descends to inter-lane ledge at y=543, then curves left to blobs center. -->
+        <path d="M252,374 H284 V543 H180 V560" fill="none" stroke="#fbbf24" stroke-width="1.3" stroke-dasharray="5,3" marker-end="url(#arrowhead-amber)"/>
+        <text transform="rotate(-90,300,460)" x="300" y="460" fill="#fbbf24" font-size="8" text-anchor="middle">gzip raw HTML</text>
+
+        <!-- ⑤ items[]: testerhome.py → normalize.py  [diagonal down, cyan] -->
+        <line x1="554" y1="374" x2="622" y2="435" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="598" y="408" fill="#22d3ee" font-size="8">5. items[]</text>
+
+        <!-- ⑥ parsed fields: normalize.py → dedup.py  [horizontal, cyan] -->
+        <line x1="722" y1="474" x2="748" y2="474" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="735" y="464" fill="#94a3b8" font-size="7.5" text-anchor="middle">6.</text>
+
+        <!-- ⑦+⑧ job_id → insert_jobs: dedup.py → db.py  [right then down, cyan] -->
+        <path d="M913,474 H1078 V560" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="996" y="464" fill="#22d3ee" font-size="8" text-anchor="middle">7+8. job_id → insert_jobs</text>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             BOXES
+             ═══════════════════════════════════════════════════════════ -->
+
+        <!-- ── ENTRY LANE ─────────────────────────────────────────── -->
+
+        <!-- User · CLI (external) -->
+        <rect x="82" y="45" width="147" height="68" rx="6" fill="#0f172a"/>
+        <rect x="82" y="45" width="147" height="68" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="155" y="69" fill="white" font-size="11" font-weight="600" text-anchor="middle">User · CLI</text>
+        <text x="155" y="85" fill="#94a3b8" font-size="9" text-anchor="middle">jma crawl</text>
+        <text x="155" y="99" fill="#64748b" font-size="7.5" text-anchor="middle">--region --keywords</text>
+
+        <!-- cli.py -->
+        <rect x="322" y="45" width="164" height="68" rx="6" fill="#0f172a"/>
+        <rect x="322" y="45" width="164" height="68" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="404" y="69" fill="white" font-size="11" font-weight="600" text-anchor="middle">cli.py</text>
+        <text x="404" y="85" fill="#94a3b8" font-size="9" text-anchor="middle">Typer · crawl cmd</text>
+        <text x="404" y="99" fill="#22d3ee" font-size="7.5" text-anchor="middle">asyncio entrypoint</text>
+
+        <!-- ── PIPELINE LANE ───────────────────────────────────────── -->
+
+        <!-- pipeline/crawl.py -->
+        <rect x="82" y="152" width="268" height="80" rx="6" fill="#0f172a"/>
+        <rect x="82" y="152" width="268" height="80" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="216" y="174" fill="white" font-size="11" font-weight="600" text-anchor="middle">pipeline/crawl.py</text>
+        <text x="216" y="190" fill="#94a3b8" font-size="9" text-anchor="middle">single-source orchestrator</text>
+        <text x="216" y="204" fill="#64748b" font-size="8" text-anchor="middle">page loop · url-cache check · dedup</text>
+        <text x="216" y="218" fill="#34d399" font-size="7.5" text-anchor="middle">--max-pages 5 · --max-jobs 300</text>
+
+        <!-- data/sources/testerhome.yaml -->
+        <rect x="400" y="162" width="155" height="58" rx="6" fill="#0f172a"/>
+        <rect x="400" y="162" width="155" height="58" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="477" y="182" fill="white" font-size="10" font-weight="600" text-anchor="middle">data/sources/</text>
+        <text x="477" y="196" fill="white" font-size="10" font-weight="600" text-anchor="middle">testerhome.yaml</text>
+        <text x="477" y="211" fill="#64748b" font-size="7.5" text-anchor="middle">selectors · politeness cfg</text>
+
+        <!-- ── SOURCES LANE ────────────────────────────────────────── -->
+
+        <!-- sources/http.py -->
+        <rect x="82" y="265" width="196" height="109" rx="6" fill="#0f172a"/>
+        <rect x="82" y="265" width="196" height="109" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="180" y="287" fill="white" font-size="11" font-weight="600" text-anchor="middle">sources/http.py</text>
+        <text x="180" y="303" fill="#94a3b8" font-size="9" text-anchor="middle">httpx.AsyncClient</text>
+        <text x="180" y="317" fill="#64748b" font-size="8" text-anchor="middle">retry · backoff · UA rotation</text>
+        <text x="180" y="330" fill="#64748b" font-size="8" text-anchor="middle">delay_ms · concurrency cap</text>
+        <text x="180" y="344" fill="#34d399" font-size="7.5" text-anchor="middle">FetchResult{status, html, url}</text>
+        <text x="180" y="357" fill="#64748b" font-size="7" text-anchor="middle">→ blockage · → parse · → gzip</text>
+
+        <!-- sources/base.py -->
+        <rect x="296" y="265" width="145" height="109" rx="6" fill="#0f172a"/>
+        <rect x="296" y="265" width="145" height="109" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="368" y="287" fill="white" font-size="11" font-weight="600" text-anchor="middle">sources/base.py</text>
+        <text x="368" y="303" fill="#94a3b8" font-size="9" text-anchor="middle">JobSource Protocol</text>
+        <text x="368" y="320" fill="#64748b" font-size="8" text-anchor="middle">fetch_page(n)</text>
+        <text x="368" y="333" fill="#64748b" font-size="8" text-anchor="middle">parse_jobs(html)</text>
+        <text x="368" y="346" fill="#64748b" font-size="8" text-anchor="middle">source_id: str</text>
+        <text x="368" y="360" fill="#64748b" font-size="7" text-anchor="middle">typing.Protocol</text>
+
+        <!-- sources/testerhome.py -->
+        <rect x="455" y="265" width="198" height="109" rx="6" fill="#0f172a"/>
+        <rect x="455" y="265" width="198" height="109" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="554" y="287" fill="white" font-size="11" font-weight="600" text-anchor="middle">sources/testerhome.py</text>
+        <text x="554" y="303" fill="#94a3b8" font-size="9" text-anchor="middle">selectolax parser</text>
+        <text x="554" y="317" fill="#64748b" font-size="8" text-anchor="middle">.topics .topic items</text>
+        <text x="554" y="330" fill="#64748b" font-size="8" text-anchor="middle">title · company · url</text>
+        <text x="554" y="344" fill="#34d399" font-size="7.5" text-anchor="middle">SourceResult{ok, jobs[]}</text>
+        <text x="554" y="358" fill="#64748b" font-size="7" text-anchor="middle">implements JobSource</text>
+
+        <!-- testerhome.com (external) -->
+        <rect x="706" y="265" width="188" height="78" rx="6" fill="#0f172a"/>
+        <rect x="706" y="265" width="188" height="78" rx="6" fill="rgba(30,41,59,0.55)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="800" y="288" fill="white" font-size="11" font-weight="600" text-anchor="middle">testerhome.com</text>
+        <text x="800" y="304" fill="#94a3b8" font-size="9" text-anchor="middle">/jobs?page=N</text>
+        <text x="800" y="318" fill="#64748b" font-size="8" text-anchor="middle">listing HTML · external</text>
+        <text x="800" y="332" fill="#64748b" font-size="7" text-anchor="middle">rate-limited · captcha risk</text>
+
+        <!-- ── DOMAIN LAYER ────────────────────────────────────────── -->
+
+        <!-- domain/blockage.py -->
+        <rect x="80" y="443" width="196" height="86" rx="6" fill="#0f172a"/>
+        <rect x="80" y="443" width="196" height="86" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="178" y="464" fill="white" font-size="11" font-weight="600" text-anchor="middle">domain/blockage.py</text>
+        <text x="178" y="480" fill="#94a3b8" font-size="9" text-anchor="middle">classify(html) → status</text>
+        <text x="178" y="494" fill="#64748b" font-size="8" text-anchor="middle">ok · blocked · empty</text>
+        <text x="178" y="507" fill="#64748b" font-size="8" text-anchor="middle">rate_limited · soft-block</text>
+        <text x="178" y="520" fill="#22d3ee" font-size="7" text-anchor="middle">pure · deterministic</text>
+
+        <!-- domain/models.py -->
+        <rect x="296" y="443" width="198" height="86" rx="6" fill="#0f172a"/>
+        <rect x="296" y="443" width="198" height="86" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="395" y="464" fill="white" font-size="11" font-weight="600" text-anchor="middle">domain/models.py</text>
+        <text x="395" y="480" fill="#94a3b8" font-size="9" text-anchor="middle">Pydantic v2 · frozen</text>
+        <text x="395" y="493" fill="#34d399" font-size="8" text-anchor="middle">Job · Location · Salary</text>
+        <text x="395" y="506" fill="#34d399" font-size="8" text-anchor="middle">Experience · WorkMode</text>
+        <text x="395" y="519" fill="#64748b" font-size="7" text-anchor="middle">MarketReport · FitReport</text>
+
+        <!-- domain/normalize.py -->
+        <rect x="514" y="443" width="212" height="86" rx="6" fill="#0f172a"/>
+        <rect x="514" y="443" width="212" height="86" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="620" y="464" fill="white" font-size="11" font-weight="600" text-anchor="middle">domain/normalize.py</text>
+        <text x="620" y="480" fill="#94a3b8" font-size="9" text-anchor="middle">parse_salary · parse_exp</text>
+        <text x="620" y="494" fill="#94a3b8" font-size="9" text-anchor="middle">parse_location · parse_wfh</text>
+        <text x="620" y="508" fill="#64748b" font-size="8" text-anchor="middle">PLAN case 1.A corpus</text>
+        <text x="620" y="521" fill="#64748b" font-size="7" text-anchor="middle">×14薪 · WFH normalised</text>
+
+        <!-- domain/dedup.py -->
+        <rect x="748" y="443" width="165" height="86" rx="6" fill="#0f172a"/>
+        <rect x="748" y="443" width="165" height="86" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="830" y="464" fill="white" font-size="11" font-weight="600" text-anchor="middle">domain/dedup.py</text>
+        <text x="830" y="480" fill="#94a3b8" font-size="9" text-anchor="middle">job_id(job) → sha1</text>
+        <text x="830" y="494" fill="#64748b" font-size="8" text-anchor="middle">source:internal_id</text>
+        <text x="830" y="507" fill="#64748b" font-size="8" text-anchor="middle">fallback: title|co|city</text>
+        <text x="830" y="520" fill="#22d3ee" font-size="7" text-anchor="middle">pure · deterministic</text>
+
+        <!-- ── STORAGE LANE ────────────────────────────────────────── -->
+
+        <!-- storage/blobs.py -->
+        <rect x="80" y="572" width="196" height="92" rx="6" fill="#0f172a"/>
+        <rect x="80" y="572" width="196" height="92" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="178" y="593" fill="white" font-size="11" font-weight="600" text-anchor="middle">storage/blobs.py</text>
+        <text x="178" y="609" fill="#94a3b8" font-size="9" text-anchor="middle">gzipped raw HTML</text>
+        <text x="178" y="623" fill="#64748b" font-size="8" text-anchor="middle">data/raw/{source}/</text>
+        <text x="178" y="636" fill="#64748b" font-size="8" text-anchor="middle">{yyyymmdd}/sha1.html.gz</text>
+        <text x="178" y="652" fill="#a78bfa" font-size="7" text-anchor="middle">async write · idempotent</text>
+
+        <!-- storage/cache.py -->
+        <rect x="300" y="572" width="196" height="92" rx="6" fill="#0f172a"/>
+        <rect x="300" y="572" width="196" height="92" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="398" y="593" fill="white" font-size="11" font-weight="600" text-anchor="middle">storage/cache.py</text>
+        <text x="398" y="609" fill="#94a3b8" font-size="9" text-anchor="middle">24h URL cache</text>
+        <text x="398" y="623" fill="#64748b" font-size="8" text-anchor="middle">seen(url) · remember(url)</text>
+        <text x="398" y="636" fill="#64748b" font-size="8" text-anchor="middle">backed by url_cache table</text>
+        <text x="398" y="652" fill="#a78bfa" font-size="7" text-anchor="middle">re-run idempotency</text>
+
+        <!-- data/jobs.db (file artifact) -->
+        <rect x="518" y="572" width="156" height="92" rx="6" fill="#0f172a"/>
+        <rect x="518" y="572" width="156" height="92" rx="6" fill="rgba(30,41,59,0.6)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="596" y="593" fill="white" font-size="11" font-weight="600" text-anchor="middle">data/jobs.db</text>
+        <text x="596" y="609" fill="#64748b" font-size="9" text-anchor="middle">SQLite · gitignored</text>
+        <text x="596" y="624" fill="#64748b" font-size="8" text-anchor="middle">jobs · runs</text>
+        <text x="596" y="637" fill="#64748b" font-size="8" text-anchor="middle">url_cache</text>
+        <text x="596" y="652" fill="#a78bfa" font-size="7" text-anchor="middle">3 tables</text>
+
+        <!-- storage/db.py  — right side, same lane, receives start_run and insert_jobs arrows -->
+        <rect x="956" y="563" width="230" height="105" rx="6" fill="#0f172a"/>
+        <rect x="956" y="563" width="230" height="105" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1071" y="585" fill="white" font-size="11" font-weight="600" text-anchor="middle">storage/db.py</text>
+        <text x="1071" y="601" fill="#94a3b8" font-size="9" text-anchor="middle">aiosqlite</text>
+        <text x="1071" y="616" fill="#a78bfa" font-size="8" text-anchor="middle">jobs · runs · url_cache</text>
+        <text x="1071" y="630" fill="#64748b" font-size="7.5" text-anchor="middle">start_run · finish_run</text>
+        <text x="1071" y="643" fill="#64748b" font-size="7.5" text-anchor="middle">insert_jobs (ON CONFLICT IGNORE)</text>
+        <text x="1071" y="656" fill="#64748b" font-size="7" text-anchor="middle">seen · remember</text>
+
+        <!-- ── TESTS LANE ──────────────────────────────────────────── -->
+
+        <rect x="80" y="714" width="163" height="78" rx="6" fill="#0f172a"/>
+        <rect x="80" y="714" width="163" height="78" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="161" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/domain</text>
+        <text x="161" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">models · normalize</text>
+        <text x="161" y="763" fill="#94a3b8" font-size="8" text-anchor="middle">blockage · dedup</text>
+        <text x="161" y="777" fill="#64748b" font-size="7" text-anchor="middle">unit · no mocks needed</text>
+
+        <rect x="256" y="714" width="163" height="78" rx="6" fill="#0f172a"/>
+        <rect x="256" y="714" width="163" height="78" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="337" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/sources</text>
+        <text x="337" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">http (respx fixtures)</text>
+        <text x="337" y="763" fill="#94a3b8" font-size="8" text-anchor="middle">testerhome parser</text>
+        <text x="337" y="777" fill="#64748b" font-size="7" text-anchor="middle">HTML snapshot fixtures</text>
+
+        <rect x="432" y="714" width="163" height="78" rx="6" fill="#0f172a"/>
+        <rect x="432" y="714" width="163" height="78" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="513" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/storage</text>
+        <text x="513" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">db · cache · blobs</text>
+        <text x="513" y="763" fill="#94a3b8" font-size="8" text-anchor="middle">tmp_path fixtures</text>
+        <text x="513" y="777" fill="#64748b" font-size="7" text-anchor="middle">aiosqlite in-memory</text>
+
+        <rect x="608" y="714" width="163" height="78" rx="6" fill="#0f172a"/>
+        <rect x="608" y="714" width="163" height="78" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="689" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/pipeline</text>
+        <text x="689" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">crawl_e2e (offline)</text>
+        <text x="689" y="763" fill="#94a3b8" font-size="8" text-anchor="middle">respx + tmp SQLite</text>
+        <text x="689" y="777" fill="#64748b" font-size="7" text-anchor="middle">full-stack offline smoke</text>
+
+        <rect x="784" y="714" width="152" height="78" rx="6" fill="#0f172a"/>
+        <rect x="784" y="714" width="152" height="78" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="860" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/cli</text>
+        <text x="860" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">Typer · CliRunner</text>
+        <text x="860" y="763" fill="#94a3b8" font-size="8" text-anchor="middle">cmd surface</text>
+        <text x="860" y="777" fill="#64748b" font-size="7" text-anchor="middle">arg validation</text>
+
+        <rect x="950" y="714" width="152" height="78" rx="6" fill="#0f172a"/>
+        <rect x="950" y="714" width="152" height="78" rx="6" fill="transparent" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="3,3"/>
+        <text x="1026" y="735" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/live</text>
+        <text x="1026" y="750" fill="#94a3b8" font-size="8" text-anchor="middle">@pytest.mark.live</text>
+        <text x="1026" y="763" fill="#fb7185" font-size="8" text-anchor="middle">opt-in smoke</text>
+        <text x="1026" y="777" fill="#64748b" font-size="7" text-anchor="middle">real network · manual only</text>
+
+        <!-- ── LEGEND ──────────────────────────────────────────────── -->
+        <text x="1148" y="270" fill="white" font-size="10" font-weight="600">Legend</text>
+        <rect x="1148" y="280" width="14" height="9" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1168" y="288" fill="#94a3b8" font-size="8">CLI / pure domain</text>
+        <rect x="1148" y="295" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1168" y="303" fill="#94a3b8" font-size="8">I/O · sources · pipeline</text>
+        <rect x="1148" y="310" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="1168" y="318" fill="#94a3b8" font-size="8">storage / persistence</text>
+        <rect x="1148" y="325" width="14" height="9" rx="2" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="1168" y="333" fill="#94a3b8" font-size="8">external / config / file</text>
+        <rect x="1148" y="340" width="14" height="9" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1168" y="348" fill="#94a3b8" font-size="8">tests / verification</text>
+        <line x1="1148" y1="363" x2="1162" y2="363" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1168" y="366" fill="#94a3b8" font-size="8">data flow (solid)</text>
+        <line x1="1148" y1="378" x2="1162" y2="378" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1168" y="381" fill="#94a3b8" font-size="8">config / response</text>
+        <line x1="1148" y1="393" x2="1162" y2="393" stroke="#fbbf24" stroke-width="1.3" stroke-dasharray="4,2"/>
+        <text x="1168" y="396" fill="#94a3b8" font-size="8">raw blob write</text>
+        <line x1="1148" y1="408" x2="1162" y2="408" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="4,2"/>
+        <text x="1168" y="411" fill="#94a3b8" font-size="8">run lifecycle / cache</text>
+
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>End-to-end flow (numbered above)</h3>
+        </div>
+        <ul>
+          <li>• 1. CLI parses args → pipeline loads <code>testerhome.yaml</code></li>
+          <li>• 2. URL cache lookup (24h SQLite-backed)</li>
+          <li>• 3. On miss: httpx fetch with retry / backoff</li>
+          <li>• 4. <code>blockage.classify</code> → ok / blocked / empty / rate-limited</li>
+          <li>• 5. parser yields list items + gzip raw to blobs/</li>
+          <li>• 6. <code>normalize</code> parses salary / exp / location</li>
+          <li>• 7. <code>dedup.job_id</code> → sha1 source-scoped id</li>
+          <li>• 8. <code>insert_jobs</code> upserts; <code>finish_run</code> closes the run row</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Pure / I/O boundary discipline</h3>
+        </div>
+        <ul>
+          <li>• <code>domain/*</code> is pure: deterministic, no network, no mutation</li>
+          <li>• <code>sources/*</code>, <code>storage/*</code>, <code>pipeline/*</code> own all I/O</li>
+          <li>• Pydantic v2 models are frozen — no in-place mutation</li>
+          <li>• All v1 <code>Job</code> fields exist up-front with safe defaults</li>
+          <li>• Phase 3+ fills empty fields; schema never alters</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>What's NOT in this slice yet</h3>
+        </div>
+        <ul>
+          <li>• Randstad, Bing, Playwright sources (Phase 2)</li>
+          <li>• LLM client, extraction, narration (Phase 3+)</li>
+          <li>• Skills canonicalisation / <code>skills.yaml</code> (Phase 3)</li>
+          <li>• Market &amp; fit reports, persona, scoring (Phase 4–5)</li>
+          <li>• <code>jma run</code>, <code>sources status</code>, cross-run delta (Phase 2/6)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">job-market-agent · Phase 0 + Phase 1 vertical slice · derived from PLAN.md + docs/superpowers/specs/2026-05-21-phase-0-1-design.md · 2026-05-22</p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'current-workflow.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('current-workflow.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

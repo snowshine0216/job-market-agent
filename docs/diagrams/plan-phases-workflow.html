@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>job-market-agent · PLAN.md Phased Workflow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1320px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #fbbf24; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 1240px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.orange { background: #fb923c; }
+    .card-dot.slate { background: #94a3b8; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>job-market-agent · PLAN.md Phased Workflow</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">7 phases · Phase 1 = current vertical slice · each phase adds one capability without re-architecting</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 1050">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="ar-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="ar-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="ar-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="ar-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="ar-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="ar-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <linearGradient id="phase1-glow" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(52, 211, 153, 0.18)"/>
+            <stop offset="100%" stop-color="rgba(52, 211, 153, 0.06)"/>
+          </linearGradient>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============ Phase lane outlines (drawn first as background) ============ -->
+        <!-- Each lane: 175 wide, x = 30 + i*180, y = 100, h = 800 -->
+        <!-- Phase 0 -->
+        <rect x="30"   y="100" width="160" height="800" rx="12" fill="rgba(34, 211, 238, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 1 (CURRENT — highlighted) -->
+        <rect x="200"  y="100" width="180" height="800" rx="12" fill="url(#phase1-glow)" stroke="#34d399" stroke-width="2"/>
+        <!-- Phase 2 -->
+        <rect x="390"  y="100" width="160" height="800" rx="12" fill="rgba(34, 211, 238, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 3 -->
+        <rect x="560"  y="100" width="170" height="800" rx="12" fill="rgba(167, 139, 250, 0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 4 -->
+        <rect x="740"  y="100" width="170" height="800" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 5 -->
+        <rect x="920"  y="100" width="180" height="800" rx="12" fill="rgba(251, 113, 133, 0.05)" stroke="#fb7185" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 6 -->
+        <rect x="1110" y="100" width="170" height="800" rx="12" fill="rgba(251, 146, 60, 0.05)" stroke="#fb923c" stroke-width="1" stroke-dasharray="6,4"/>
+
+        <!-- ============ Phase headers ============ -->
+        <rect x="42" y="112" width="136" height="40" rx="6" fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="110" y="130" fill="#22d3ee" font-size="11" font-weight="700" text-anchor="middle">PHASE 0</text>
+        <text x="110" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Foundation · ½ d</text>
+
+        <rect x="212" y="112" width="156" height="40" rx="6" fill="rgba(6, 78, 59, 0.7)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="290" y="128" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">PHASE 1 ◆ CURRENT</text>
+        <text x="290" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Job search works · 2–3 d</text>
+
+        <rect x="402" y="112" width="136" height="40" rx="6" fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="470" y="130" fill="#22d3ee" font-size="11" font-weight="700" text-anchor="middle">PHASE 2</text>
+        <text x="470" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Multi-source · 2 d</text>
+
+        <rect x="572" y="112" width="146" height="40" rx="6" fill="rgba(76, 29, 149, 0.5)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="645" y="130" fill="#a78bfa" font-size="11" font-weight="700" text-anchor="middle">PHASE 3</text>
+        <text x="645" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Extraction (LLM) · 1–2 d</text>
+
+        <rect x="752" y="112" width="146" height="40" rx="6" fill="rgba(120, 53, 15, 0.5)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="825" y="130" fill="#fbbf24" font-size="11" font-weight="700" text-anchor="middle">PHASE 4</text>
+        <text x="825" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Market report · 1–2 d</text>
+
+        <rect x="932" y="112" width="156" height="40" rx="6" fill="rgba(136, 19, 55, 0.5)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1010" y="130" fill="#fb7185" font-size="11" font-weight="700" text-anchor="middle">PHASE 5</text>
+        <text x="1010" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Profile + fit · 2 d</text>
+
+        <rect x="1122" y="112" width="146" height="40" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="1195" y="130" fill="#fb923c" font-size="11" font-weight="700" text-anchor="middle">PHASE 6</text>
+        <text x="1195" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Polish · 1 d</text>
+
+        <!-- ============ Cross-phase data-flow arrows (drawn early, behind boxes) ============ -->
+        <!-- P0 models → P1 storage (foundation feeds Phase 1) -->
+        <line x1="180" y1="225" x2="208" y2="225" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ar-cyan)"/>
+        <!-- P1 jobs.db → P2 multi-source -->
+        <line x1="378" y1="225" x2="398" y2="225" stroke="#34d399" stroke-width="1.5" marker-end="url(#ar-emerald)"/>
+        <!-- P2 jobs[] → P3 extraction -->
+        <line x1="548" y1="225" x2="568" y2="225" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ar-cyan)"/>
+        <!-- P3 enriched → P4 stats -->
+        <line x1="728" y1="225" x2="748" y2="225" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ar-violet)"/>
+        <!-- P4 stats → P5 fit (stats feed fit refinement) -->
+        <line x1="908" y1="225" x2="928" y2="225" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ar-amber)"/>
+        <!-- P5 → P6 polish -->
+        <line x1="1098" y1="225" x2="1118" y2="225" stroke="#fb7185" stroke-width="1.5" marker-end="url(#ar-rose)"/>
+
+        <!-- Cross-flow label band -->
+        <text x="665" y="200" fill="#64748b" font-size="8" text-anchor="middle">Job rows · SQLite · raw blobs · skills.yaml · personas · stats — accumulate left → right</text>
+
+        <!-- ============ PHASE 0 — Foundation ============ -->
+        <rect x="45" y="170" width="130" height="100" rx="6" fill="#0f172a"/>
+        <rect x="45" y="170" width="130" height="100" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="110" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">domain/models.py</text>
+        <text x="110" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">Pydantic v2 frozen</text>
+        <text x="110" y="220" fill="#22d3ee" font-size="8" text-anchor="middle">Job · Salary · Loc</text>
+        <text x="110" y="232" fill="#22d3ee" font-size="8" text-anchor="middle">Experience · Seniority</text>
+        <text x="110" y="244" fill="#22d3ee" font-size="8" text-anchor="middle">SourceResult</text>
+        <text x="110" y="256" fill="#22d3ee" font-size="8" text-anchor="middle">MarketReport · FitReport</text>
+
+        <rect x="45" y="290" width="130" height="65" rx="6" fill="#0f172a"/>
+        <rect x="45" y="290" width="130" height="65" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="110" y="308" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests + bootstrap</text>
+        <text x="110" y="322" fill="#94a3b8" font-size="8" text-anchor="middle">pyproject.toml · uv</text>
+        <text x="110" y="335" fill="#94a3b8" font-size="8" text-anchor="middle">ruff · pytest</text>
+        <text x="110" y="346" fill="#64748b" font-size="7" text-anchor="middle">unit tests for Job schema</text>
+
+        <text x="110" y="395" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="110" y="412" fill="#94a3b8" font-size="8" text-anchor="middle">Job constructs from</text>
+        <text x="110" y="424" fill="#94a3b8" font-size="8" text-anchor="middle">3 heterogeneous postings</text>
+        <text x="110" y="436" fill="#94a3b8" font-size="8" text-anchor="middle">(case 0)</text>
+
+        <text x="110" y="475" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="110" y="488" fill="#94a3b8" font-size="8" text-anchor="middle">all v1 fields exist</text>
+        <text x="110" y="500" fill="#94a3b8" font-size="8" text-anchor="middle">up-front; later phases</text>
+        <text x="110" y="512" fill="#94a3b8" font-size="8" text-anchor="middle">FILL not ALTER</text>
+
+        <!-- ============ PHASE 1 — Job search works (CURRENT) ============ -->
+        <rect x="215" y="170" width="150" height="60" rx="6" fill="#0f172a"/>
+        <rect x="215" y="170" width="150" height="60" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="290" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">cli.py · jma crawl</text>
+        <text x="290" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">Typer · async entry</text>
+        <text x="290" y="220" fill="#34d399" font-size="7" text-anchor="middle">--region --keywords --source</text>
+
+        <rect x="215" y="245" width="150" height="55" rx="6" fill="#0f172a"/>
+        <rect x="215" y="245" width="150" height="55" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="290" y="262" fill="white" font-size="10" font-weight="600" text-anchor="middle">pipeline/crawl.py</text>
+        <text x="290" y="277" fill="#94a3b8" font-size="8" text-anchor="middle">single-source orchestrate</text>
+        <text x="290" y="290" fill="#64748b" font-size="7" text-anchor="middle">page loop · dedup · bounded</text>
+
+        <rect x="215" y="315" width="72" height="80" rx="6" fill="#0f172a"/>
+        <rect x="215" y="315" width="72" height="80" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="251" y="333" fill="white" font-size="9" font-weight="600" text-anchor="middle">sources/</text>
+        <text x="251" y="350" fill="#34d399" font-size="8" text-anchor="middle">base.py</text>
+        <text x="251" y="362" fill="#34d399" font-size="8" text-anchor="middle">http.py</text>
+        <text x="251" y="374" fill="#34d399" font-size="8" text-anchor="middle">testerhome</text>
+        <text x="251" y="388" fill="#64748b" font-size="7" text-anchor="middle">httpx async</text>
+
+        <rect x="293" y="315" width="72" height="80" rx="6" fill="#0f172a"/>
+        <rect x="293" y="315" width="72" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="329" y="333" fill="white" font-size="9" font-weight="600" text-anchor="middle">domain/</text>
+        <text x="329" y="350" fill="#22d3ee" font-size="8" text-anchor="middle">normalize</text>
+        <text x="329" y="362" fill="#22d3ee" font-size="8" text-anchor="middle">blockage</text>
+        <text x="329" y="374" fill="#22d3ee" font-size="8" text-anchor="middle">dedup</text>
+        <text x="329" y="388" fill="#64748b" font-size="7" text-anchor="middle">pure</text>
+
+        <rect x="215" y="410" width="150" height="80" rx="6" fill="#0f172a"/>
+        <rect x="215" y="410" width="150" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="290" y="430" fill="white" font-size="10" font-weight="600" text-anchor="middle">storage/</text>
+        <text x="290" y="446" fill="#a78bfa" font-size="8" text-anchor="middle">db · cache · blobs</text>
+        <text x="290" y="461" fill="#94a3b8" font-size="7" text-anchor="middle">aiosqlite · jobs/runs/url_cache</text>
+        <text x="290" y="473" fill="#94a3b8" font-size="7" text-anchor="middle">24h URL cache</text>
+        <text x="290" y="484" fill="#94a3b8" font-size="7" text-anchor="middle">gzip raw HTML</text>
+
+        <text x="290" y="525" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="290" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">jma crawl --region</text>
+        <text x="290" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">Hangzhou --keywords</text>
+        <text x="290" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">"AI agent" writes ≥1</text>
+        <text x="290" y="578" fill="#94a3b8" font-size="8" text-anchor="middle">Job row from real fetch</text>
+        <text x="290" y="592" fill="#34d399" font-size="8" text-anchor="middle">SourceResult.status == ok</text>
+
+        <text x="290" y="635" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">real cases driving:</text>
+        <text x="290" y="650" fill="#94a3b8" font-size="8" text-anchor="middle">1.A salary corpus</text>
+        <text x="290" y="662" fill="#94a3b8" font-size="8" text-anchor="middle">1.B blockage classifier</text>
+        <text x="290" y="674" fill="#94a3b8" font-size="8" text-anchor="middle">1.C TesterHome DOM</text>
+
+        <!-- ============ PHASE 2 — Multi-source ============ -->
+        <rect x="405" y="170" width="130" height="80" rx="6" fill="#0f172a"/>
+        <rect x="405" y="170" width="130" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="470" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/randstad</text>
+        <text x="470" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">variants cn / com</text>
+        <text x="470" y="220" fill="#94a3b8" font-size="8" text-anchor="middle">requires_browser?</text>
+        <text x="470" y="233" fill="#64748b" font-size="7" text-anchor="middle">httpx OR Playwright</text>
+        <text x="470" y="244" fill="#22d3ee" font-size="7" text-anchor="middle">case 2.B</text>
+
+        <rect x="405" y="265" width="130" height="80" rx="6" fill="#0f172a"/>
+        <rect x="405" y="265" width="130" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="470" y="285" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/bing</text>
+        <text x="470" y="302" fill="#94a3b8" font-size="8" text-anchor="middle">Bing Web Search v7</text>
+        <text x="470" y="315" fill="#94a3b8" font-size="8" text-anchor="middle">aggregator queries</text>
+        <text x="470" y="328" fill="#64748b" font-size="7" text-anchor="middle">snippet-only Job</text>
+        <text x="470" y="340" fill="#22d3ee" font-size="7" text-anchor="middle">data_quality=0.4 · case 2.A</text>
+
+        <rect x="405" y="360" width="130" height="55" rx="6" fill="#0f172a"/>
+        <rect x="405" y="360" width="130" height="55" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="470" y="378" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/browser</text>
+        <text x="470" y="393" fill="#94a3b8" font-size="8" text-anchor="middle">Playwright wrapper</text>
+        <text x="470" y="406" fill="#64748b" font-size="7" text-anchor="middle">opt-in per source</text>
+
+        <rect x="405" y="430" width="130" height="55" rx="6" fill="#0f172a"/>
+        <rect x="405" y="430" width="130" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="470" y="448" fill="white" font-size="10" font-weight="600" text-anchor="middle">jma sources status</text>
+        <text x="470" y="463" fill="#94a3b8" font-size="8" text-anchor="middle">probe + reasons</text>
+        <text x="470" y="476" fill="#64748b" font-size="7" text-anchor="middle">never-fail policy</text>
+
+        <text x="470" y="525" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="470" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">3 sources behind one</text>
+        <text x="470" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">protocol; blockage</text>
+        <text x="470" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">degrades gracefully</text>
+
+        <text x="470" y="610" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="470" y="625" fill="#94a3b8" font-size="8" text-anchor="middle">snippet-only Jobs</text>
+        <text x="470" y="637" fill="#94a3b8" font-size="8" text-anchor="middle">keep stats alive when</text>
+        <text x="470" y="649" fill="#94a3b8" font-size="8" text-anchor="middle">zhaopin/liepin soft-block</text>
+
+        <!-- ============ PHASE 3 — Extraction (LLM enters) ============ -->
+        <rect x="575" y="170" width="140" height="80" rx="6" fill="#0f172a"/>
+        <rect x="575" y="170" width="140" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="645" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm/client.py</text>
+        <text x="645" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">DeepSeek-chat</text>
+        <text x="645" y="220" fill="#94a3b8" font-size="8" text-anchor="middle">OpenAI-compatible</text>
+        <text x="645" y="233" fill="#a78bfa" font-size="7" text-anchor="middle">sha1(prompt) disk cache</text>
+        <text x="645" y="244" fill="#64748b" font-size="7" text-anchor="middle">retry · backoff · cost log</text>
+
+        <rect x="575" y="265" width="140" height="65" rx="6" fill="#0f172a"/>
+        <rect x="575" y="265" width="140" height="65" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="645" y="283" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm/extract.py</text>
+        <text x="645" y="298" fill="#94a3b8" font-size="8" text-anchor="middle">JD → structured JSON</text>
+        <text x="645" y="311" fill="#a78bfa" font-size="7" text-anchor="middle">skills · seniority · work-mode</text>
+        <text x="645" y="322" fill="#64748b" font-size="7" text-anchor="middle">~$0.0005 / job · case 3.B</text>
+
+        <rect x="575" y="345" width="140" height="70" rx="6" fill="#0f172a"/>
+        <rect x="575" y="345" width="140" height="70" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="645" y="363" fill="white" font-size="10" font-weight="600" text-anchor="middle">domain/skills.py</text>
+        <text x="645" y="378" fill="#94a3b8" font-size="8" text-anchor="middle">canonicalise raw → canon</text>
+        <text x="645" y="391" fill="#22d3ee" font-size="7" text-anchor="middle">data/skills.yaml ~300 entries</text>
+        <text x="645" y="402" fill="#64748b" font-size="7" text-anchor="middle">unmapped logged · case 3.A</text>
+
+        <rect x="575" y="430" width="140" height="50" rx="6" fill="#0f172a"/>
+        <rect x="575" y="430" width="140" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="645" y="448" fill="white" font-size="10" font-weight="600" text-anchor="middle">pipeline/extract.py</text>
+        <text x="645" y="463" fill="#94a3b8" font-size="8" text-anchor="middle">bounded concurrency 4</text>
+        <text x="645" y="475" fill="#64748b" font-size="7" text-anchor="middle">uncached jobs only</text>
+
+        <text x="645" y="525" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="645" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">every Job row gains</text>
+        <text x="645" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">skills_canonical[],</text>
+        <text x="645" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">seniority, work_mode</text>
+
+        <text x="645" y="610" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="645" y="625" fill="#94a3b8" font-size="8" text-anchor="middle">vLLM / TGI / LMDeploy</text>
+        <text x="645" y="637" fill="#94a3b8" font-size="8" text-anchor="middle">collapse to LLM Inference</text>
+        <text x="645" y="649" fill="#94a3b8" font-size="8" text-anchor="middle">→ honest top-skills chart</text>
+
+        <!-- ============ PHASE 4 — Market report ============ -->
+        <rect x="755" y="170" width="140" height="75" rx="6" fill="#0f172a"/>
+        <rect x="755" y="170" width="140" height="75" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="825" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">domain/stats.py</text>
+        <text x="825" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">pandas · pure</text>
+        <text x="825" y="220" fill="#fbbf24" font-size="7" text-anchor="middle">salary histograms · p25/50/75</text>
+        <text x="825" y="231" fill="#fbbf24" font-size="7" text-anchor="middle">top skills weighted by quality</text>
+        <text x="825" y="241" fill="#fbbf24" font-size="7" text-anchor="middle">TF-IDF role clusters</text>
+
+        <rect x="755" y="260" width="140" height="65" rx="6" fill="#0f172a"/>
+        <rect x="755" y="260" width="140" height="65" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="825" y="278" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm/narrate.py</text>
+        <text x="825" y="294" fill="#94a3b8" font-size="8" text-anchor="middle">ONE LLM call</text>
+        <text x="825" y="306" fill="#a78bfa" font-size="7" text-anchor="middle">~3k in · ~1.2k out · ~$0.002</text>
+        <text x="825" y="317" fill="#64748b" font-size="7" text-anchor="middle">stats + sample JDs → prose</text>
+
+        <rect x="755" y="340" width="140" height="65" rx="6" fill="#0f172a"/>
+        <rect x="755" y="340" width="140" height="65" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="825" y="358" fill="white" font-size="10" font-weight="600" text-anchor="middle">report/render.py</text>
+        <text x="825" y="374" fill="#94a3b8" font-size="8" text-anchor="middle">Jinja templates</text>
+        <text x="825" y="386" fill="#fbbf24" font-size="7" text-anchor="middle">market_{en,zh}.j2</text>
+        <text x="825" y="397" fill="#64748b" font-size="7" text-anchor="middle">md + data.json sidecar</text>
+
+        <rect x="755" y="420" width="140" height="50" rx="6" fill="#0f172a"/>
+        <rect x="755" y="420" width="140" height="50" rx="6" fill="rgba(30, 41, 59, 0.6)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="825" y="440" fill="white" font-size="10" font-weight="600" text-anchor="middle">market.md</text>
+        <text x="825" y="455" fill="#fbbf24" font-size="8" text-anchor="middle">jma report market</text>
+        <text x="825" y="465" fill="#64748b" font-size="7" text-anchor="middle">+ data.json</text>
+
+        <text x="825" y="525" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="825" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">stats deterministic;</text>
+        <text x="825" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">LLM narrates over</text>
+        <text x="825" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">pre-computed numbers</text>
+
+        <text x="825" y="610" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="825" y="625" fill="#94a3b8" font-size="8" text-anchor="middle">arithmetic in Python,</text>
+        <text x="825" y="637" fill="#94a3b8" font-size="8" text-anchor="middle">synthesis in LLM —</text>
+        <text x="825" y="649" fill="#94a3b8" font-size="8" text-anchor="middle">numbers can't hallucinate</text>
+
+        <!-- ============ PHASE 5 — Profile + fit ============ -->
+        <rect x="935" y="170" width="150" height="60" rx="6" fill="#0f172a"/>
+        <rect x="935" y="170" width="150" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1010" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">profile/ingest.py</text>
+        <text x="1010" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">md · txt · pdf (pypdf)</text>
+        <text x="1010" y="219" fill="#fb7185" font-size="7" text-anchor="middle">Tier 1: role + yrs + ≥3 skills</text>
+
+        <rect x="935" y="245" width="150" height="65" rx="6" fill="#0f172a"/>
+        <rect x="935" y="245" width="150" height="65" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1010" y="263" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm/persona.py</text>
+        <text x="1010" y="279" fill="#94a3b8" font-size="8" text-anchor="middle">Tier 2: persona + gaps</text>
+        <text x="1010" y="292" fill="#a78bfa" font-size="7" text-anchor="middle">ONE call · confidence_score</text>
+        <text x="1010" y="303" fill="#fb7185" font-size="7" text-anchor="middle">&lt; 0.6 → stop &amp; ask · case 5.A/B</text>
+
+        <rect x="935" y="325" width="150" height="65" rx="6" fill="#0f172a"/>
+        <rect x="935" y="325" width="150" height="65" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1010" y="343" fill="white" font-size="10" font-weight="600" text-anchor="middle">domain/scoring.py</text>
+        <text x="1010" y="358" fill="#94a3b8" font-size="8" text-anchor="middle">weighted ALL jobs</text>
+        <text x="1010" y="370" fill="#fb7185" font-size="7" text-anchor="middle">skills .50 / exp .20 / sal .15</text>
+        <text x="1010" y="381" fill="#fb7185" font-size="7" text-anchor="middle">loc .10 / seniority .05 · case 5.C</text>
+
+        <rect x="935" y="405" width="150" height="65" rx="6" fill="#0f172a"/>
+        <rect x="935" y="405" width="150" height="65" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1010" y="423" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm/fit.py</text>
+        <text x="1010" y="438" fill="#94a3b8" font-size="8" text-anchor="middle">ONE call · top-30 refine</text>
+        <text x="1010" y="450" fill="#a78bfa" font-size="7" text-anchor="middle">why-fit · skill-gap synth</text>
+        <text x="1010" y="461" fill="#64748b" font-size="7" text-anchor="middle">90-day actions · case 5.D</text>
+
+        <rect x="935" y="485" width="150" height="50" rx="6" fill="#0f172a"/>
+        <rect x="935" y="485" width="150" height="50" rx="6" fill="rgba(30, 41, 59, 0.6)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1010" y="505" fill="white" font-size="10" font-weight="600" text-anchor="middle">fit.md</text>
+        <text x="1010" y="520" fill="#fb7185" font-size="8" text-anchor="middle">jma report fit</text>
+        <text x="1010" y="530" fill="#64748b" font-size="7" text-anchor="middle">--resume / --profile</text>
+
+        <text x="1010" y="575" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="1010" y="592" fill="#94a3b8" font-size="8" text-anchor="middle">profile.yaml → ranked</text>
+        <text x="1010" y="604" fill="#94a3b8" font-size="8" text-anchor="middle">top-10 with %match,</text>
+        <text x="1010" y="616" fill="#94a3b8" font-size="8" text-anchor="middle">gap synthesis, actions</text>
+
+        <text x="1010" y="660" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="1010" y="675" fill="#94a3b8" font-size="8" text-anchor="middle">deterministic scorer</text>
+        <text x="1010" y="687" fill="#94a3b8" font-size="8" text-anchor="middle">ranks ALL; LLM refines</text>
+        <text x="1010" y="699" fill="#94a3b8" font-size="8" text-anchor="middle">only top-30 — bounded $</text>
+
+        <!-- ============ PHASE 6 — Polish ============ -->
+        <rect x="1125" y="170" width="140" height="60" rx="6" fill="#0f172a"/>
+        <rect x="1125" y="170" width="140" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="1195" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">cli · jma run</text>
+        <text x="1195" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">convenience wrapper</text>
+        <text x="1195" y="219" fill="#fb923c" font-size="7" text-anchor="middle">crawl → market → fit?</text>
+
+        <rect x="1125" y="245" width="140" height="80" rx="6" fill="#0f172a"/>
+        <rect x="1125" y="245" width="140" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1195" y="263" fill="white" font-size="10" font-weight="600" text-anchor="middle">stats · cross-run delta</text>
+        <text x="1195" y="280" fill="#94a3b8" font-size="8" text-anchor="middle">SQL diff on runs table</text>
+        <text x="1195" y="293" fill="#fb923c" font-size="7" text-anchor="middle">posting Δ · salary Δ</text>
+        <text x="1195" y="304" fill="#fb923c" font-size="7" text-anchor="middle">new signals (e.g. MCP)</text>
+        <text x="1195" y="315" fill="#64748b" font-size="7" text-anchor="middle">free once data exists · 6.A</text>
+
+        <rect x="1125" y="340" width="140" height="65" rx="6" fill="#0f172a"/>
+        <rect x="1125" y="340" width="140" height="65" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="1195" y="358" fill="white" font-size="10" font-weight="600" text-anchor="middle">README · samples</text>
+        <text x="1195" y="374" fill="#94a3b8" font-size="8" text-anchor="middle">worked example run</text>
+        <text x="1195" y="386" fill="#94a3b8" font-size="8" text-anchor="middle">sample market.md</text>
+        <text x="1195" y="397" fill="#94a3b8" font-size="8" text-anchor="middle">sample fit.md</text>
+
+        <text x="1195" y="445" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="1195" y="462" fill="#94a3b8" font-size="8" text-anchor="middle">one command produces</text>
+        <text x="1195" y="474" fill="#94a3b8" font-size="8" text-anchor="middle">both reports + trend</text>
+        <text x="1195" y="486" fill="#94a3b8" font-size="8" text-anchor="middle">section vs prior runs</text>
+
+        <text x="1195" y="535" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
+        <text x="1195" y="550" fill="#94a3b8" font-size="8" text-anchor="middle">runs table from Phase 1</text>
+        <text x="1195" y="562" fill="#94a3b8" font-size="8" text-anchor="middle">makes trend a SQL diff,</text>
+        <text x="1195" y="574" fill="#94a3b8" font-size="8" text-anchor="middle">not a migration</text>
+
+        <!-- ============ Shared infrastructure callouts (bottom band) ============ -->
+        <rect x="30" y="730" width="1250" height="150" rx="10" fill="transparent" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="42" y="750" fill="#94a3b8" font-size="10" font-weight="600">Shared infrastructure · grows monotonically across phases</text>
+
+        <rect x="50" y="765" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="50" y="765" width="200" height="100" rx="6" fill="rgba(76, 29, 149, 0.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="150" y="785" fill="white" font-size="11" font-weight="600" text-anchor="middle">SQLite · data/jobs.db</text>
+        <text x="150" y="804" fill="#94a3b8" font-size="9" text-anchor="middle">jobs · runs · url_cache</text>
+        <text x="150" y="820" fill="#64748b" font-size="8" text-anchor="middle">P1 lays schema</text>
+        <text x="150" y="832" fill="#64748b" font-size="8" text-anchor="middle">P3 fills extracted fields</text>
+        <text x="150" y="844" fill="#64748b" font-size="8" text-anchor="middle">P4–P5 reads only</text>
+        <text x="150" y="856" fill="#a78bfa" font-size="8" text-anchor="middle">P6 cross-run delta query</text>
+
+        <rect x="270" y="765" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="270" y="765" width="200" height="100" rx="6" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="370" y="785" fill="white" font-size="11" font-weight="600" text-anchor="middle">data/raw/{source}/{ymd}/</text>
+        <text x="370" y="804" fill="#94a3b8" font-size="9" text-anchor="middle">gzipped HTML blobs</text>
+        <text x="370" y="820" fill="#64748b" font-size="8" text-anchor="middle">written by P1 / P2 sources</text>
+        <text x="370" y="832" fill="#64748b" font-size="8" text-anchor="middle">re-readable for re-extract</text>
+        <text x="370" y="844" fill="#64748b" font-size="8" text-anchor="middle">audit trail · crash-safe</text>
+        <text x="370" y="856" fill="#fb923c" font-size="8" text-anchor="middle">enables P3 replay</text>
+
+        <rect x="490" y="765" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="490" y="765" width="200" height="100" rx="6" fill="rgba(76, 29, 149, 0.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="590" y="785" fill="white" font-size="11" font-weight="600" text-anchor="middle">.cache/llm/</text>
+        <text x="590" y="804" fill="#94a3b8" font-size="9" text-anchor="middle">sha1(prompt) → response</text>
+        <text x="590" y="820" fill="#64748b" font-size="8" text-anchor="middle">introduced in P3</text>
+        <text x="590" y="832" fill="#64748b" font-size="8" text-anchor="middle">re-runs of P4 narrate = $0</text>
+        <text x="590" y="844" fill="#64748b" font-size="8" text-anchor="middle">re-runs of P5 persona = $0</text>
+        <text x="590" y="856" fill="#a78bfa" font-size="8" text-anchor="middle">makes "spam LLM" impossible</text>
+
+        <rect x="710" y="765" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="710" y="765" width="200" height="100" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="810" y="785" fill="white" font-size="11" font-weight="600" text-anchor="middle">data/skills.yaml</text>
+        <text x="810" y="804" fill="#94a3b8" font-size="9" text-anchor="middle">~300 synonym→canon entries</text>
+        <text x="810" y="820" fill="#64748b" font-size="8" text-anchor="middle">seeded in P3</text>
+        <text x="810" y="832" fill="#64748b" font-size="8" text-anchor="middle">grown from unmapped log</text>
+        <text x="810" y="844" fill="#64748b" font-size="8" text-anchor="middle">read by P4 stats</text>
+        <text x="810" y="856" fill="#22d3ee" font-size="8" text-anchor="middle">read by P5 scoring</text>
+
+        <rect x="930" y="765" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="930" y="765" width="200" height="100" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1030" y="785" fill="white" font-size="11" font-weight="600" text-anchor="middle">data/region_aliases.yaml</text>
+        <text x="1030" y="804" fill="#94a3b8" font-size="9" text-anchor="middle">city → multilingual variants</text>
+        <text x="1030" y="820" fill="#64748b" font-size="8" text-anchor="middle">used by P2 Bing query gen</text>
+        <text x="1030" y="832" fill="#64748b" font-size="8" text-anchor="middle">user-overridable</text>
+        <text x="1030" y="844" fill="#64748b" font-size="8" text-anchor="middle">enables Berlin / Tokyo /</text>
+        <text x="1030" y="856" fill="#22d3ee" font-size="8" text-anchor="middle">Bengaluru without core changes</text>
+
+        <rect x="1150" y="765" width="120" height="100" rx="6" fill="#0f172a"/>
+        <rect x="1150" y="765" width="120" height="100" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1210" y="785" fill="white" font-size="10" font-weight="600" text-anchor="middle">tests/</text>
+        <text x="1210" y="803" fill="#94a3b8" font-size="8" text-anchor="middle">TDD red-green-</text>
+        <text x="1210" y="815" fill="#94a3b8" font-size="8" text-anchor="middle">refactor each step</text>
+        <text x="1210" y="832" fill="#64748b" font-size="8" text-anchor="middle">mirrors src/jma</text>
+        <text x="1210" y="846" fill="#64748b" font-size="8" text-anchor="middle">FakeLLM in P3+</text>
+        <text x="1210" y="860" fill="#fb7185" font-size="7" text-anchor="middle">offline CI default</text>
+
+        <!-- ============ Legend ============ -->
+        <text x="40" y="920" fill="white" font-size="11" font-weight="600">Legend</text>
+
+        <rect x="40" y="935" width="14" height="9" rx="2" fill="rgba(34, 211, 238, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="60" y="943" fill="#94a3b8" font-size="9">Planned phase</text>
+
+        <rect x="170" y="935" width="14" height="9" rx="2" fill="url(#phase1-glow)" stroke="#34d399" stroke-width="2"/>
+        <text x="190" y="943" fill="#94a3b8" font-size="9">PHASE 1 · current implementation (solid border)</text>
+
+        <rect x="40" y="955" width="14" height="9" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="60" y="963" fill="#94a3b8" font-size="9">pure domain · CLI</text>
+
+        <rect x="200" y="955" width="14" height="9" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="220" y="963" fill="#94a3b8" font-size="9">backend / pipeline / sources</text>
+
+        <rect x="400" y="955" width="14" height="9" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="420" y="963" fill="#94a3b8" font-size="9">storage · LLM</text>
+
+        <rect x="540" y="955" width="14" height="9" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="560" y="963" fill="#94a3b8" font-size="9">render · trend</text>
+
+        <rect x="660" y="955" width="14" height="9" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="680" y="963" fill="#94a3b8" font-size="9">profile / fit / tests</text>
+
+        <rect x="820" y="955" width="14" height="9" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="840" y="963" fill="#94a3b8" font-size="9">polish / convenience</text>
+
+        <line x1="970" y1="960" x2="990" y2="960" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ar-cyan)"/>
+        <text x="998" y="963" fill="#94a3b8" font-size="9">cross-phase data flow</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>What ships at each phase</h3>
+        </div>
+        <ul>
+          <li>• <b>P0</b> · <code>Job</code> schema with all v1 fields</li>
+          <li>• <b>P1</b> ◆ current · <code>jma crawl</code> · TesterHome → SQLite</li>
+          <li>• <b>P2</b> · Randstad + Bing + Playwright + <code>sources status</code></li>
+          <li>• <b>P3</b> · DeepSeek extraction + canonical skills</li>
+          <li>• <b>P4</b> · <code>market.md</code> (stats + one narrate call)</li>
+          <li>• <b>P5</b> · <code>fit.md</code> (persona + score + top-30 refine)</li>
+          <li>• <b>P6</b> · <code>jma run</code> + cross-run delta + README</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Why this phasing</h3>
+        </div>
+        <ul>
+          <li>• User mandate: <i>job-search works end-to-end before anything else</i></li>
+          <li>• Each phase exits on a demonstrable real-case (PLAN section 4)</li>
+          <li>• <code>runs</code> table lands at P1 so P6 trend = SQL query, not migration</li>
+          <li>• LLM enters only at P3 — pure pipeline before that</li>
+          <li>• Per-prompt sha1 cache from P3 keeps re-runs free across P4 / P5</li>
+          <li>• TDD red-green-refactor inside every phase</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>LLM cost ceilings (PLAN cases)</h3>
+        </div>
+        <ul>
+          <li>• Extract: ≈ $0.0005 / job · 300 jobs ≈ $0.15 (one-time, cached)</li>
+          <li>• Narrate market: ≈ $0.002 / report · cached by stats digest</li>
+          <li>• Persona: 1 call / profile · cached by profile hash</li>
+          <li>• Fit refine: 1 call / report over top-30 only</li>
+          <li>• <b>Architectural guarantee:</b> no LLM does arithmetic — pandas does</li>
+          <li>• Cache hit → re-runs are $0 across the board</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">job-market-agent · Phased build per PLAN.md §4 · Phase 1 currently in flight · 2026-05-22</p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'plan-phases-workflow.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('plan-phases-workflow.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
