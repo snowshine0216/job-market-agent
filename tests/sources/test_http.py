@@ -68,16 +68,20 @@ async def test_fetch_429_then_200_with_backoff(fake_sleep, sleeps) -> None:
 @respx.mock
 @pytest.mark.asyncio
 async def test_fetch_5xx_exhausts_retries(fake_sleep, sleeps) -> None:
+    """5xx uses the (cheaper) max_retries_5xx budget, not max_retries."""
     route = respx.get("https://example.com/x")
-    route.side_effect = [httpx.Response(503, text="")] * 4  # initial + 3 retries
+    route.side_effect = [httpx.Response(503, text="")] * 4
     async with httpx.AsyncClient() as ac:
         client = AsyncHttpClient(
-            ac, rate=RateConfig(max_retries=3, backoff_base_s=2), sleep=fake_sleep
+            ac,
+            rate=RateConfig(max_retries=3, backoff_base_s=2),  # default max_retries_5xx=1
+            sleep=fake_sleep,
         )
         result = await client.fetch("https://example.com/x")
     assert result.status_code == 503
-    assert result.attempts == 4
-    assert sleeps == [2, 4, 8]  # 2^1, 2^2, 2^3
+    # Default max_retries_5xx=1 → initial attempt + 1 retry = 2 attempts.
+    assert result.attempts == 2
+    assert sleeps == [2]  # one backoff: 2^1
 
 
 def test_rate_config_default_max_retries_5xx() -> None:
