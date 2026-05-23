@@ -83,8 +83,14 @@ Self-contained HTML diagrams in `docs/diagrams/`:
 
 - [phase-1-testerhome-crawl.html](docs/diagrams/phase-1-testerhome-crawl.html) — the implemented Phase-0/1 crawl pipeline (cli → pipeline → source → storage).
 - [plan-phases-workflow.html](docs/diagrams/plan-phases-workflow.html) — the full multi-phase plan from [PLAN.md](PLAN.md), showing where the current slice sits.
+- [database-schema.html](docs/diagrams/database-schema.html) — SQLite schema for `data/jobs.db` (runs, jobs, run_jobs, url_cache) plus the gzipped raw HTML blob path, annotated with ADR-0001/0002/0003.
+- [module-dependency.html](docs/diagrams/module-dependency.html) — import graph across `src/jma/`: cli → pipeline → sources/ + storage/ → domain/ (pure island).
 
-Open in a browser to see the rendered flow. Keep these in sync when the pipeline shape changes (new source, new stage, new storage layer).
+Open in a browser to see the rendered flow. Keep these in sync when the relevant shape changes:
+
+- **pipeline shape** (new source, new stage, new storage layer) → update `phase-1-testerhome-crawl.html` and `plan-phases-workflow.html`.
+- **DB schema** (new column, table, index, FK, or `_DDL`/migration edit in `src/jma/storage/db.py`) → update `database-schema.html`.
+- **Module dependencies** (new module, new cross-module import, or a change that breaks the `domain/` pure-island invariant) → update `module-dependency.html`.
 
 ## Agent infra (existing)
 
