@@ -290,3 +290,58 @@ def _filter_keywords(jobs: list[Job], keywords: tuple[str, ...]) -> list[Job]:
         if any(n in hay for n in needles):
             kept.append(j)
     return kept
+
+
+# Block-level child elements scanned when extracting labeled values.
+# Each child's text() is bounded by the element, which prevents label
+# scans from spanning paragraphs (robust against renderer minification).
+_BLOCK_CHILD_CSS = "p, li, dt, dd, blockquote, h1, h2, h3, h4, h5, h6"
+
+
+def _parse_detail(body: str, cfg: SourceConfig) -> dict[str, str]:
+    """Extract {company, salary_raw} from a TesterHome topic detail page.
+
+    Honours cfg.detail.enabled. Returns empty strings for fields that
+    don't match any configured selector + label-pattern combination.
+    Pure: HTML parsing only, no I/O.
+    """
+    if not cfg.detail.enabled:
+        return {"company": "", "salary_raw": ""}
+    tree = HTMLParser(body)
+    return {
+        "company": _extract_first_label_value(
+            tree, cfg.detail.company_selectors, cfg.detail.company_label_patterns
+        ),
+        "salary_raw": _extract_first_label_value(
+            tree, cfg.detail.salary_selectors, cfg.detail.salary_label_patterns
+        ),
+    }
+
+
+def _extract_first_label_value(
+    tree: HTMLParser, selectors: tuple[str, ...], patterns: tuple[str, ...]
+) -> str:
+    """For each selector, walk block-element children and run each regex
+    against each child's text. Return the first non-empty named group
+    `value`, stripped. Empty string on no match.
+
+    Per-child scanning ensures the regex value cannot span across
+    sibling elements even if the HTML has no inter-tag whitespace.
+    """
+    compiled = tuple(re.compile(p) for p in patterns)
+    for selector in selectors:
+        root = tree.css_first(selector)
+        if root is None:
+            continue
+        children = list(root.css(_BLOCK_CHILD_CSS)) or [root]
+        for child in children:
+            text = (child.text() or "").strip()
+            if not text:
+                continue
+            for pat in compiled:
+                m = pat.search(text)
+                if m:
+                    value = (m.groupdict().get("value") or "").strip()
+                    if value:
+                        return value
+    return ""
