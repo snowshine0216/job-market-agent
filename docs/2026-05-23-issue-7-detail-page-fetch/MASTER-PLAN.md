@@ -18,6 +18,20 @@ Sub-branch prefix: claude/issue-7-detail-page-fetch-
 
 branch → impl → drift → ship (PR + docs + inline review) → (verify ‖ pr-review) → fix → merge
 
+## Degraded subagent mode (environmental)
+
+Agent dispatch from this orchestrator session is blocked by:
+> "API Error: Usage credits required for 1M context · turn on usage credits at claude.ai/settings/usage"
+(Orchestrator runs on Opus 4.7 1M; the Agent tool inherits the parent context window and Anthropic refuses without 1M credits enabled.)
+
+Workaround: execute impl + drift + ship + verify + pr-review + fix INLINE in the orchestrator session.
+Quality trade-off:
+- No fresh-context isolation per phase (single orchestrator context across all gates)
+- /ship subagent dispatch unavailable → use `gh pr create` directly (last-resort path)
+- /code-review subagent dispatch unavailable → run /code-review skill inline against the PR
+- All verdict files (drift, ship, verify, review, pr-review) are still written to disk and merge-gated identically
+User dismissed the AskUserQuestion prompt and said "continue", so this is the chosen path.
+
 ## Loop exit contract (item 001)
 
 All three post-ship verdicts must be PASS or PASS-WITH-NITS:
