@@ -33,12 +33,12 @@ def _data_root() -> Path:
     return Path.cwd() / "data"
 
 
-def _factory_for(source_name: str):
+def _factory_for(source_name: str, data_root: Path):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
         http = AsyncHttpClient(ac, rate=cfg.rate)
-        return TesterHomeSource(cfg=cfg, http=http, data_root=_data_root(),
+        return TesterHomeSource(cfg=cfg, http=http, data_root=data_root,
                                 on_fetch=on_fetch, cache_get=cache_get)
 
     return _make
@@ -89,18 +89,19 @@ def crawl(
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     keywords_t = tuple(keywords)
+    data_root = _data_root()  # resolve once; used in factory, pipeline, and summary
+    db_path = data_root / "jobs.db"
 
     async def _run_all() -> tuple[str, list[SourceResult]]:
         all_results: list[SourceResult] = []
         run_id_final: str | None = None
-        db_path = _data_root() / "jobs.db"
         for s_name in source:
             run_id, results = await pipeline_run(
                 region=region,
                 keywords=keywords_t,
-                source_factory=_factory_for(s_name),
+                source_factory=_factory_for(s_name, data_root),
                 db_path=db_path,
-                data_root=_data_root(),
+                data_root=data_root,
                 max_pages=max_pages,
                 max_jobs=max_jobs,
                 use_cache=not no_cache,
@@ -117,7 +118,6 @@ def crawl(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    db_path = _data_root() / "jobs.db"
     for line in _summary_lines(run_id, region, keywords_t, results, db_path):
         typer.echo(line)
 

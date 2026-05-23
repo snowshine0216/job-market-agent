@@ -138,10 +138,12 @@ class TesterHomeSource:
                     source=self.name,
                     status=SourceStatus.EMPTY,
                     jobs=(),
-                    reason=f"0 items at {self._cfg.known_good_list_selector!r} on page 1",
+                    reason=f"0 items at {self._cfg.known_good_list_selector!r} on page {n}",
                     pages_fetched=pages_fetched,
                 )
 
+            # Invariant: items only exist when status==200 → blob_ref is always a str here.
+            assert blob_ref is not None
             page_jobs = [
                 _item_to_job(item, cfg=self._cfg, source_name=self.name,
                              blob_ref=blob_ref)
@@ -185,6 +187,8 @@ class TesterHomeSource:
 def _parse_listing(body: str, cfg: SourceConfig) -> list[dict]:
     tree = HTMLParser(body)
     selector = cfg.listing.list_item_selector
+    # Split once outside the loop; posted_at_attr is e.g. ".time@title".
+    posted_at_selector, _, posted_at_attr_name = cfg.listing.posted_at_attr.partition("@")
     items: list[dict] = []
     for node in tree.css(selector):
         anchor = node.css_first(cfg.listing.title_selector)
@@ -192,12 +196,10 @@ def _parse_listing(body: str, cfg: SourceConfig) -> list[dict]:
             continue
         href = anchor.attributes.get(cfg.listing.href_attr) or ""
         title_text = (anchor.text() or "").strip()
-        # posted_at_attr is e.g. ".time@title" — split.
-        selector_part, _, attr = cfg.listing.posted_at_attr.partition("@")
         posted_at = ""
-        time_node = node.css_first(selector_part)
+        time_node = node.css_first(posted_at_selector)
         if time_node is not None:
-            posted_at = time_node.attributes.get(attr) or ""
+            posted_at = time_node.attributes.get(posted_at_attr_name) or ""
         items.append({"title": title_text, "href": href, "posted_at_attr": posted_at})
     return items
 
