@@ -102,6 +102,72 @@ A Run is one CLI invocation. Membership of an observation in a Run lives in
 the `run_jobs` join table — see
 [ADR-0002](docs/adr/0002-run-is-one-invocation-recorded-via-join-table.md).
 
+### Inspecting the data
+
+The stdout summary shows the headline numbers; for everything else, query
+`data/jobs.db` directly. `sqlite3` ships with macOS and most Linux distros.
+
+List recent runs and their per-source outcome:
+
+```bash
+sqlite3 -header -column data/jobs.db "
+  SELECT id, region, keywords_json, started_at, finished_at
+  FROM runs ORDER BY started_at DESC LIMIT 10;"
+
+# Pretty-print the per-source status/reason for the latest run
+sqlite3 data/jobs.db "SELECT source_results_json FROM runs
+                      ORDER BY started_at DESC LIMIT 1;" | python3 -m json.tool
+```
+
+See every observation collected in the most recent run:
+
+```bash
+sqlite3 data/jobs.db ".mode line" "
+  SELECT j.title, j.company, j.location_city, j.location_work_mode,
+         j.salary_raw, j.experience_raw, j.posted_at, j.url, j.raw_payload_ref
+  FROM jobs j JOIN run_jobs rj ON rj.job_id = j.id
+  WHERE rj.run_id = (SELECT id FROM runs ORDER BY started_at DESC LIMIT 1);"
+```
+
+Compact table view across all observations:
+
+```bash
+sqlite3 -header -column data/jobs.db "
+  SELECT substr(title,1,40) AS title, company, location_city AS city,
+         salary_raw AS salary, url
+  FROM jobs ORDER BY fetched_at DESC LIMIT 20;"
+```
+
+Count unique *Jobs* (deduplicated across observations via `canonical_id` — see
+[ADR-0001](docs/adr/0001-cross-source-dedup-via-canonical-id.md); a plain
+`COUNT(*)` over `jobs` counts observations, not Jobs):
+
+```bash
+sqlite3 data/jobs.db "SELECT COUNT(DISTINCT canonical_id) FROM jobs;"
+```
+
+Inspect the raw HTML the parser actually saw — `raw_payload_ref` on each row
+points at a gzipped blob under `data/raw/<source>/`:
+
+```bash
+sqlite3 data/jobs.db "SELECT raw_payload_ref FROM jobs LIMIT 1;"
+gunzip -c data/raw/testerhome/<sha>.html.gz | less
+```
+
+Interactive session:
+
+```bash
+sqlite3 data/jobs.db
+sqlite> .schema jobs        # all 31 columns
+sqlite> .mode line          # vertical layout, easier to read
+sqlite> SELECT * FROM jobs WHERE location_city = 'Hangzhou' LIMIT 3;
+sqlite> .quit
+```
+
+Prefer a GUI? Install [DB Browser for SQLite](https://sqlitebrowser.org/)
+(`brew install --cask db-browser-for-sqlite` on macOS) and open `data/jobs.db`
+— the `runs`, `jobs`, `run_jobs`, and `url_cache` tables are all browsable.
+
 ## Configuration
 
 Source selectors and politeness live in checked-in YAML under `config/`:
