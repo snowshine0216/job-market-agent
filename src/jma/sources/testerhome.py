@@ -21,6 +21,7 @@ from jma.domain.models import (
     Job,
     SourceResult,
     SourceStatus,
+    UrlStatus,
 )
 from jma.domain.normalize import (
     normalize_for_match,
@@ -163,19 +164,35 @@ class TesterHomeSource:
                 enriched.append(job)
                 continue
 
+            # 404/410 are durable "resource gone" signals — tag and continue
+            # regardless of what classify() returns (it maps them to ERROR, but
+            # they are NOT anti-bot blocks and must NOT halt the crawl).
+            if page.status_code in (404, 410):
+                checked_at = datetime.now(UTC)
+                enriched.append(
+                    _apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at)
+                )
+                continue
+
             if page.block.kind is not SourceStatus.OK:
                 halt = f"detail block: {page.block.kind.value}: {page.block.reason}"
                 enriched.append(job)
                 continue
 
-            if page.status_code != 200:
-                # Non-200 with classify=OK (e.g. 404 with empty/short body
-                # not matching block markers). Keep listing-only.
-                enriched.append(job)
-                continue
-
-            detail = _parse_detail(page.body, self._cfg)
-            enriched.append(_enrich_from_detail(job, detail, source_name=self.name))
+            checked_at = datetime.now(UTC)
+            if page.status_code == 200:
+                detail = _parse_detail(page.body, self._cfg)
+                enriched_job = _enrich_from_detail(job, detail, source_name=self.name)
+                enriched.append(
+                    _apply_url_freshness(enriched_job, status_code=200, checked_at=checked_at)
+                )
+            else:
+                # Non-200 with classify=OK (e.g. empty/short body not matching
+                # block markers). _apply_url_freshness: other non-200 → preserve
+                # prior signal (3xx, 429, other 4xx, 5xx are transient unknowns).
+                enriched.append(
+                    _apply_url_freshness(job, status_code=page.status_code, checked_at=checked_at)
+                )
 
         return enriched, halt
 
@@ -453,6 +470,41 @@ def _enrich_from_detail(job: Job, detail: dict[str, str], source_name: str) -> J
             "salary": new_salary,
         }
     )
+
+
+def _apply_url_freshness(
+    job: Job,
+    *,
+    status_code: int,
+    checked_at: datetime,
+) -> Job:
+    """Tag a Job with url_status based on a detail-fetch outcome.
+
+    Durable-signal model (see docs/adr/0003-url-freshness-as-durable-signal.md):
+
+    - 200            → url_status=LIVE,  url_last_checked_at=checked_at
+    - 404, 410       → url_status=GONE,  url_last_checked_at=checked_at
+    - anything else  → preserve prior url_status and url_last_checked_at
+                       (3xx, 429, other 4xx, 5xx are all 'we don't know
+                        anything new'; never erase an earned signal).
+
+    data_quality is intentionally not touched by this helper.
+    """
+    if status_code == 200:
+        return job.model_copy(
+            update={
+                "url_status": UrlStatus.LIVE,
+                "url_last_checked_at": checked_at,
+            }
+        )
+    if status_code in (404, 410):
+        return job.model_copy(
+            update={
+                "url_status": UrlStatus.GONE,
+                "url_last_checked_at": checked_at,
+            }
+        )
+    return job
 
 
 def _extract_first_label_value(
