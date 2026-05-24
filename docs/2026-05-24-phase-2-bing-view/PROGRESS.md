@@ -4,7 +4,7 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 
 | id | spec | grill | plan | branch | impl | drift | PR (ship) | verify | review | pr-review | fix | merge |
 |----|------|-------|------|--------|------|-------|-----------|--------|--------|-----------|-----|-------|
-| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 
 ## Notes
 
