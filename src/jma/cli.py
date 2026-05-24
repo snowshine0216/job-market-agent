@@ -59,7 +59,12 @@ def _factory_for(source_name: str, data_root: Path):
         def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
             http = AsyncHttpClient(ac, rate=cfg.rate)
             return BingAggregatorSource(
-                cfg=cfg, http=http, data_root=data_root, on_fetch=on_fetch, cache_get=cache_get
+                cfg=cfg,
+                http=http,
+                data_root=data_root,
+                api_key=os.environ[cfg.api_key_env],
+                on_fetch=on_fetch,
+                cache_get=cache_get,
             )
 
         return _make
