@@ -19,15 +19,17 @@ REPO = Path(__file__).resolve().parents[2]
 CFG_PATH = REPO / "config/sources/bing.yaml"
 
 # Minimal SerpAPI JSON with one on-target result.
-FIX_ONE_JOB = json.dumps({
-    "organic_results": [
-        {
-            "title": "AI Agent Engineer | BOSS直聘",
-            "link": "https://www.zhipin.com/job_detail/42.html",
-            "snippet": "Hangzhou 20-40K 3-5年",
-        }
-    ]
-})
+FIX_ONE_JOB = json.dumps(
+    {
+        "organic_results": [
+            {
+                "title": "AI Agent Engineer | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/42.html",
+                "snippet": "Hangzhou 20-40K 3-5年",
+            }
+        ]
+    }
+)
 FIX_EMPTY = json.dumps({"organic_results": []})
 
 
@@ -55,9 +57,7 @@ def _factory(tmp_path: Path):
 @respx.mock
 @pytest.mark.asyncio
 async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -> None:
-    respx.get("https://serpapi.com/search").mock(
-        return_value=httpx.Response(200, text=FIX_ONE_JOB)
-    )
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=FIX_ONE_JOB))
 
     run_id, source_results = await run(
         region="Hangzhou",
@@ -157,9 +157,7 @@ async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_no_cache_skips_reads_but_writes(tmp_path: Path) -> None:
     """L1: --no-cache skips cache reads so network is hit both runs; writes still happen."""
-    respx.get("https://serpapi.com/search").mock(
-        return_value=httpx.Response(200, text=FIX_ONE_JOB)
-    )
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=FIX_ONE_JOB))
     db_path = tmp_path / "data/jobs.db"
 
     for _ in range(2):

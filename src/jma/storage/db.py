@@ -10,7 +10,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from jma.domain.models import Job, SourceResult
+from jma.domain.models import Job, Run, SourceResult
 
 _DDL = """
 PRAGMA journal_mode = WAL;
@@ -406,9 +406,7 @@ async def jobs_for_run(conn: aiosqlite.Connection, run_id: str) -> list[Job]:
     return jobs
 
 
-async def latest_finished_run(conn: aiosqlite.Connection) -> "Run | None":
-    from jma.domain.models import Run  # local import
-
+async def latest_finished_run(conn: aiosqlite.Connection) -> Run | None:
     cur = await conn.execute(
         "SELECT id, region, keywords_json, started_at, finished_at "
         "FROM runs WHERE finished_at IS NOT NULL "
@@ -426,10 +424,8 @@ async def latest_finished_run(conn: aiosqlite.Connection) -> "Run | None":
     )
 
 
-async def get_run(conn: aiosqlite.Connection, run_id: str) -> "Run | None":
+async def get_run(conn: aiosqlite.Connection, run_id: str) -> Run | None:
     """Fetch a Run by id; finished_at may be None."""
-    from jma.domain.models import Run
-
     cur = await conn.execute(
         "SELECT id, region, keywords_json, started_at, finished_at FROM runs WHERE id = ?",
         (run_id,),

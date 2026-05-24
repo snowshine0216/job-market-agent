@@ -19,32 +19,36 @@ def _env() -> jinja2.Environment:
 
 
 def _context(*, data_root_abs: str = "/tmp/jma-test", rows: list[dict] | None = None) -> dict:
-    rows = rows if rows is not None else [
-        {
-            "title": "AI Agent Engineer",
-            "title_raw": "AI Agent Engineer",
-            "company": "ACME",
-            "city": None,
-            "salary_raw": "20-40K",
-            "posted_at": datetime(2026, 5, 22, tzinfo=UTC).isoformat(),
-            "source": "bing:zhipin.com",
-            "url": "https://www.zhipin.com/job_detail/1.html",
-            "raw_payload_ref": "raw/bing/20260524/abc1234567890def.json.gz",
-            "dq": 0.4,
-        },
-        {
-            "title": "Backend Engineer",
-            "title_raw": "Backend Engineer",
-            "company": None,
-            "city": None,
-            "salary_raw": "",
-            "posted_at": None,
-            "source": "bing:liepin.com",
-            "url": "https://www.liepin.com/job/2.html",
-            "raw_payload_ref": "raw/bing/20260524/fedc0987654321ba.json.gz",
-            "dq": 0.4,
-        },
-    ]
+    rows = (
+        rows
+        if rows is not None
+        else [
+            {
+                "title": "AI Agent Engineer",
+                "title_raw": "AI Agent Engineer",
+                "company": "ACME",
+                "city": None,
+                "salary_raw": "20-40K",
+                "posted_at": datetime(2026, 5, 22, tzinfo=UTC).isoformat(),
+                "source": "bing:zhipin.com",
+                "url": "https://www.zhipin.com/job_detail/1.html",
+                "raw_payload_ref": "raw/bing/20260524/abc1234567890def.json.gz",
+                "dq": 0.4,
+            },
+            {
+                "title": "Backend Engineer",
+                "title_raw": "Backend Engineer",
+                "company": None,
+                "city": None,
+                "salary_raw": "",
+                "posted_at": None,
+                "source": "bing:liepin.com",
+                "url": "https://www.liepin.com/job/2.html",
+                "raw_payload_ref": "raw/bing/20260524/fedc0987654321ba.json.gz",
+                "dq": 0.4,
+            },
+        ]
+    )
     return {
         "run": {
             "id": "deadbeef" * 4,

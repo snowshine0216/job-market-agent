@@ -38,17 +38,20 @@ def _make_source(tmp_path: Path, ac: httpx.AsyncClient, *, api_key: str = "TESTK
     )
 
 
-@pytest.mark.skipif(not FIX_EXISTS, reason="serpapi fixture not captured yet — operator must run one real SerpAPI call to create tests/fixtures/serpapi_bing_hangzhou_ai_agent.json")
+@pytest.mark.skipif(
+    not FIX_EXISTS,
+    reason="serpapi fixture not captured yet — operator must run one real SerpAPI call to create tests/fixtures/serpapi_bing_hangzhou_ai_agent.json",
+)
 @respx.mock
 @pytest.mark.asyncio
 async def test_crawl_one_page_maps_results_to_jobs(tmp_path):
     # Match any SerpAPI page request; respx ignores unspecified query params.
-    respx.get("https://serpapi.com/search").mock(
-        return_value=httpx.Response(200, text=FIX_RAW)
-    )
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=FIX_RAW))
     async with httpx.AsyncClient() as ac:
         src = _make_source(tmp_path, ac)
-        result = await src.crawl(region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=200)
+        result = await src.crawl(
+            region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=200
+        )
 
     assert result.status is SourceStatus.OK
     assert result.pages_fetched == 1
@@ -76,8 +79,16 @@ async def test_crawl_one_page_maps_results_to_jobs(tmp_path):
 async def test_off_target_host_results_are_dropped(tmp_path):
     payload = {
         "organic_results": [
-            {"title": "AI Engineer | BOSS直聘", "link": "https://www.zhipin.com/job_detail/123.html", "snippet": "Hangzhou 20-40K"},
-            {"title": "AI Engineer | Junk", "link": "https://example.com/foo", "snippet": "Hangzhou 20-40K"},
+            {
+                "title": "AI Engineer | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/123.html",
+                "snippet": "Hangzhou 20-40K",
+            },
+            {
+                "title": "AI Engineer | Junk",
+                "link": "https://example.com/foo",
+                "snippet": "Hangzhou 20-40K",
+            },
         ],
     }
     respx.get("https://serpapi.com/search").mock(
@@ -98,8 +109,16 @@ async def test_off_target_host_results_are_dropped(tmp_path):
 async def test_source_internal_id_extracted_for_zhipin_none_for_lagou(tmp_path):
     payload = {
         "organic_results": [
-            {"title": "X | BOSS直聘", "link": "https://www.zhipin.com/job_detail/42.html", "snippet": "Hangzhou"},
-            {"title": "Y | 拉勾招聘", "link": "https://www.lagou.com/some/path", "snippet": "Hangzhou"},
+            {
+                "title": "X | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/42.html",
+                "snippet": "Hangzhou",
+            },
+            {
+                "title": "Y | 拉勾招聘",
+                "link": "https://www.lagou.com/some/path",
+                "snippet": "Hangzhou",
+            },
         ],
     }
     respx.get("https://serpapi.com/search").mock(
@@ -119,7 +138,11 @@ async def test_source_internal_id_extracted_for_zhipin_none_for_lagou(tmp_path):
 async def test_blob_written_once_per_page_with_json_gz_suffix(tmp_path):
     payload = {
         "organic_results": [
-            {"title": f"X{i} | BOSS直聘", "link": f"https://www.zhipin.com/job_detail/{i}.html", "snippet": "Hangzhou"}
+            {
+                "title": f"X{i} | BOSS直聘",
+                "link": f"https://www.zhipin.com/job_detail/{i}.html",
+                "snippet": "Hangzhou",
+            }
             for i in range(3)
         ],
     }
@@ -172,6 +195,7 @@ async def test_region_alias_miss_identity_fallback(tmp_path, caplog):
     respx.get("https://serpapi.com/search").mock(side_effect=_capture)
 
     import logging
+
     caplog.set_level(logging.INFO, logger="jma.sources.bing")
 
     async with httpx.AsyncClient() as ac:
@@ -180,7 +204,9 @@ async def test_region_alias_miss_identity_fallback(tmp_path, caplog):
 
     assert "Shanghai" in captured["url"]
     # Identity fallback log line emitted.
-    assert any("Shanghai" in rec.message and "identity fallback" in rec.message for rec in caplog.records)
+    assert any(
+        "Shanghai" in rec.message and "identity fallback" in rec.message for rec in caplog.records
+    )
 
 
 @respx.mock
@@ -209,8 +235,16 @@ async def test_empty_region_omits_region_clause(tmp_path):
 async def test_keyword_filter_applies_post_fetch(tmp_path):
     payload = {
         "organic_results": [
-            {"title": "AI Agent | BOSS直聘", "link": "https://www.zhipin.com/job_detail/1.html", "snippet": "Hangzhou"},
-            {"title": "Frontend Engineer | BOSS直聘", "link": "https://www.zhipin.com/job_detail/2.html", "snippet": "Hangzhou"},
+            {
+                "title": "AI Agent | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/1.html",
+                "snippet": "Hangzhou",
+            },
+            {
+                "title": "Frontend Engineer | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/2.html",
+                "snippet": "Hangzhou",
+            },
         ],
     }
     respx.get("https://serpapi.com/search").mock(
@@ -218,7 +252,9 @@ async def test_keyword_filter_applies_post_fetch(tmp_path):
     )
     async with httpx.AsyncClient() as ac:
         src = _make_source(tmp_path, ac)
-        result = await src.crawl(region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10)
+        result = await src.crawl(
+            region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10
+        )
 
     assert len(result.jobs) == 1
     assert "AI Agent" in result.jobs[0].title_raw

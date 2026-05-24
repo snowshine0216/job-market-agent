@@ -6,7 +6,6 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from jma.cli import app

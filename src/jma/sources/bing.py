@@ -184,9 +184,7 @@ def _render_query(
         rendered = template.format(keywords=kw_clause, site_clause=site_clause)
     else:
         rv = " OR ".join(region_variants)
-        rendered = template.format(
-            keywords=kw_clause, region_variants=rv, site_clause=site_clause
-        )
+        rendered = template.format(keywords=kw_clause, region_variants=rv, site_clause=site_clause)
     # Collapse any double spaces left by removal of the region clause.
     return re.sub(r"\s+", " ", rendered).strip()
 
@@ -269,16 +267,10 @@ class BingAggregatorSource:
         max_pages: int,
         max_jobs: int,
     ) -> SourceResult:
-        region_variants, fallback = _resolve_region_variants(
-            region, self._cfg.region_aliases
-        )
+        region_variants, fallback = _resolve_region_variants(region, self._cfg.region_aliases)
         if fallback:
-            _log.info(
-                "region %r has no aliases; using identity fallback", region
-            )
-        query = _render_query(
-            cfg=self._cfg, keywords=keywords, region_variants=region_variants
-        )
+            _log.info("region %r has no aliases; using identity fallback", region)
+        query = _render_query(cfg=self._cfg, keywords=keywords, region_variants=region_variants)
 
         collected: list[Job] = []
         dropped = 0

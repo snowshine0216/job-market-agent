@@ -44,9 +44,7 @@ def _check_required_env_for_sources(source_names: list[str]) -> None:
             continue  # _factory_for will raise a clearer error later
         env_name = getattr(cfg, "api_key_env", None)
         if env_name and not os.environ.get(env_name):
-            typer.echo(
-                f"missing env var {env_name} (required by source {name!r})", err=True
-            )
+            typer.echo(f"missing env var {env_name} (required by source {name!r})", err=True)
             raise typer.Exit(code=1)
 
 

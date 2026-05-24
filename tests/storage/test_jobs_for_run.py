@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import aiosqlite
 import pytest
 
 from jma.domain.dedup import canonical_id, job_id
