@@ -298,7 +298,9 @@ async def test_api_key_not_in_cache_url_or_blob_ref(tmp_path):
             sleep=_no_sleep,
             on_fetch=_on_fetch,
         )
-        result = await src.crawl(region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10)
+        result = await src.crawl(
+            region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10
+        )
 
     assert result.status is SourceStatus.OK
     assert len(captured_on_fetch_urls) == 1, "on_fetch must be called once per page"

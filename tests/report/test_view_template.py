@@ -159,9 +159,9 @@ def test_unsafe_url_renders_as_span_not_anchor():
 
     # The <span> must not be wrapped in an <a>.
     url_anchors = [
-        a for a in tree.css("a")
-        if (a.attributes.get("href") or "") in (xss_url, "#")
-        and a.css("span.unsafe-url")
+        a
+        for a in tree.css("a")
+        if (a.attributes.get("href") or "") in (xss_url, "#") and a.css("span.unsafe-url")
     ]
     assert not url_anchors, "<span class='unsafe-url'> must not be inside an <a>"
 
@@ -183,8 +183,5 @@ def test_safe_url_renders_as_anchor():
     }
     html = _render(_context(rows=[safe_row]))
     tree = HTMLParser(html)
-    url_anchors = [
-        a for a in tree.css("a")
-        if "zhipin.com" in (a.attributes.get("href") or "")
-    ]
+    url_anchors = [a for a in tree.css("a") if "zhipin.com" in (a.attributes.get("href") or "")]
     assert url_anchors, "expected <a href> for a safe https URL"

@@ -175,9 +175,7 @@ async def test_run_jobs_raw_payload_ref_migration_on_pre_existing_db(tmp_path):
             PRIMARY KEY (run_id, job_id)
         )
     """)
-    await conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_run_jobs_job ON run_jobs(job_id)"
-    )
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_run_jobs_job ON run_jobs(job_id)")
     await conn.commit()
     await conn.close()
 
