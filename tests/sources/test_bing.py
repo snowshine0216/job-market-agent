@@ -262,6 +262,66 @@ async def test_keyword_filter_applies_post_fetch(tmp_path):
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_api_key_not_in_cache_url_or_blob_ref(tmp_path):
+    """Regression: the URL stored via on_fetch (→ url_cache) and the URL used
+    to derive the blob filename must NOT contain api_key=."""
+    captured_on_fetch_urls: list[str] = []
+
+    async def _on_fetch(url: str, status_code: int, blob_ref: str | None) -> None:
+        captured_on_fetch_urls.append(url)
+
+    payload = {
+        "organic_results": [
+            {
+                "title": "AI Agent | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/99.html",
+                "snippet": "Hangzhou",
+            },
+        ],
+    }
+    respx.get("https://serpapi.com/search").mock(
+        return_value=httpx.Response(200, text=json.dumps(payload))
+    )
+
+    cfg = load_source_config(CFG_PATH)
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    async with httpx.AsyncClient() as ac:
+        http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
+        src = BingAggregatorSource(
+            cfg=cfg,
+            http=http,
+            data_root=tmp_path,
+            api_key="SUPERSECRET",
+            sleep=_no_sleep,
+            on_fetch=_on_fetch,
+        )
+        result = await src.crawl(region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10)
+
+    assert result.status is SourceStatus.OK
+    assert len(captured_on_fetch_urls) == 1, "on_fetch must be called once per page"
+    stored_url = captured_on_fetch_urls[0]
+    assert "api_key=" not in stored_url, (
+        f"api_key must not appear in the cached URL; got: {stored_url}"
+    )
+    assert "SUPERSECRET" not in stored_url, (
+        f"api_key value must not appear in the cached URL; got: {stored_url}"
+    )
+
+    # The blob ref is derived from the cache URL; confirm the blob exists but
+    # its filename/path is stable (no api_key embedded in it).
+    blob_refs = {j.raw_payload_ref for j in result.jobs}
+    assert len(blob_refs) == 1
+    blob_ref = next(iter(blob_refs))
+    # blob_ref is a relative path like raw/bing/<hash>.json.gz —
+    # ensure the key string doesn't appear in it.
+    assert "SUPERSECRET" not in blob_ref
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_pagination_advances_start_param(tmp_path):
     pages_seen: list[str] = []
 

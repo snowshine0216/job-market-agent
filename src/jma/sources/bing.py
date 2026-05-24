@@ -241,10 +241,29 @@ class BingAggregatorSource:
         self._on_fetch = on_fetch
         self._cache_get = cache_get
 
-    def _page_url(self, *, query: str, start: int) -> str:
-        # Build a plain URL; httpx will URL-encode params via .get(url, params=...)
-        # but we want a single sortable string so blob keys are stable.
-        # Use httpx's URL builder to keep param encoding consistent.
+    def _cache_url(self, *, query: str, start: int) -> str:
+        """Return the canonical URL used as cache key and blob filename input.
+
+        The api_key param is intentionally excluded so the key is stable across
+        key rotations and the secret is never written to url_cache or the blob
+        file path on disk.
+        """
+        import httpx as _httpx
+
+        return str(
+            _httpx.URL(
+                self._cfg.endpoint,
+                params={
+                    "engine": self._cfg.engine,
+                    "q": query,
+                    "start": str(start),
+                    "count": str(self._cfg.results_per_query),
+                },
+            )
+        )
+
+    def _request_url(self, *, query: str, start: int) -> str:
+        """Return the full URL including api_key, used only for the actual HTTP GET."""
         import httpx as _httpx
 
         return str(
@@ -279,16 +298,18 @@ class BingAggregatorSource:
 
         for page_num in range(1, max_pages + 1):
             start = (page_num - 1) * self._cfg.results_per_query
-            url = self._page_url(query=query, start=start)
+            cache_url = self._cache_url(query=query, start=start)
+            request_url = self._request_url(query=query, start=start)
             pages_fetched = page_num
 
-            # Cache lookup.
-            hit = await self._cache_get(url) if self._cache_get else None
+            # Cache lookup uses the key-less URL so the cache is stable across
+            # api_key rotations and the key never reaches url_cache or disk.
+            hit = await self._cache_get(cache_url) if self._cache_get else None
             if hit and hit.status_code == 200 and hit.blob_ref:
                 body_text = blobs.read(root=self._root, ref=hit.blob_ref)
                 blob_ref = hit.blob_ref
             else:
-                fetched = await self._http.fetch(url)
+                fetched = await self._http.fetch(request_url)
                 if fetched.status_code != 200:
                     # Bing/SerpAPI failure for this page. If we already have rows,
                     # surface a partial; else return ERROR.
@@ -314,12 +335,12 @@ class BingAggregatorSource:
                 blob_ref = blobs.write(
                     root=self._root,
                     source=self.name,
-                    url=url,
+                    url=cache_url,
                     body=body_text,
                     suffix=".json.gz",
                 )
                 if self._on_fetch is not None:
-                    await self._on_fetch(url, 200, blob_ref)
+                    await self._on_fetch(cache_url, 200, blob_ref)
 
             payload = json.loads(body_text)
             organic = payload.get("organic_results", []) or []
