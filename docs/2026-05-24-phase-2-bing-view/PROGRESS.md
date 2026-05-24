@@ -4,7 +4,7 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 
 | id | spec | grill | plan | branch | impl | drift | PR (ship) | verify | review | pr-review | fix | merge |
 |----|------|-------|------|--------|------|-------|-----------|--------|--------|-----------|-----|-------|
-| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ✅ [#24](https://github.com/snowshine0216/job-market-agent/pull/24) | ⏳ | ✅ [001-review.md](items/001-review.md) | ⏳ | ⏳ | ⏳ |
+| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ✅ [#24](https://github.com/snowshine0216/job-market-agent/pull/24) | ✅ [001-verify.md](items/001-verify.md) | ✅ [001-review.md](items/001-review.md) | ✅ [001-pr-review.md](items/001-pr-review.md) | ✅ 1 round (`d1e13f2`) | ⏳ |
 
 ## Notes
 
