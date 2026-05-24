@@ -1,0 +1,37 @@
+name: bing
+engine: bing                 # serpapi engine key
+endpoint: https://serpapi.com/search
+api_key_env: SERPAPI_KEY
+results_per_query: 50        # serpapi cap; one page per query
+target_sites:
+  - zhipin.com
+  - lagou.com
+  - liepin.com
+  - 51job.com
+  - zhaopin.com
+id_patterns:                 # host (must be a target_sites entry) → capture-group-1 regex for source_internal_id
+  zhipin.com: '/job_detail/(\d+)\.html'
+  liepin.com: '/job/(\d+)\.html'
+  # lagou.com / 51job.com / zhaopin.com left unmapped on purpose — their URL schemes vary too
+  # much in current Bing results to commit a stable regex. Result: source_internal_id stays None
+  # on those hosts and Job.id falls through to dedup.py's content-hash branch. Grow this map only
+  # when a stable pattern has been verified against the live fixture.
+site_names:                  # host → board's Chinese-language site name; used as the heuristic's site-name anchor
+  zhipin.com: BOSS直聘       # so "AI Agent | BOSS直聘" yields company=None (not "BOSS直聘")
+  lagou.com: 拉勾招聘
+  liepin.com: 猎聘
+  51job.com: 前程无忧
+  zhaopin.com: 智联招聘
+query_template: >
+  ({keywords}) ({region_variants})
+  ({site_clause}) (招聘 OR hiring OR JD) -inurl:resume
+region_aliases:              # inline for Phase 2; move to data/region_aliases.yaml in Phase 3
+  Hangzhou: [Hangzhou, 杭州, 杭州市]
+# Fallback when --region <X> has no entry in this map: variants = [X] (identity).
+# bing.py logs once at INFO ("region 'X' has no aliases; using identity fallback") so the
+# operator sees the coverage gap and can grow this map. --region "" → no {region_variants}
+# clause in the query at all; the post-fetch region filter is also a no-op.
+rate:
+  delay_ms: 800              # gap between SerpAPI page requests
+  max_retries: 3
+  backoff_base_s: 1.0
