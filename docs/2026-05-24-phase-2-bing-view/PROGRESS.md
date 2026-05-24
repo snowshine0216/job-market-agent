@@ -4,7 +4,7 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 
 | id | spec | grill | plan | branch | impl | drift | PR (ship) | verify | review | pr-review | fix | merge |
 |----|------|-------|------|--------|------|-------|-----------|--------|--------|-----------|-----|-------|
-| 001 | ⏭️ user-provided | ⏭️ user-grilled | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ✅ [#24](https://github.com/snowshine0216/job-market-agent/pull/24) | ✅ [001-verify.md](items/001-verify.md) | ✅ [001-review.md](items/001-review.md) | ✅ [001-pr-review.md](items/001-pr-review.md) | ✅ 1 round (`d1e13f2`) | ⏳ |
 
 ## Notes
 
@@ -17,7 +17,7 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 | File | Status |
 |------|--------|
 | [items/001-spec.md](items/001-spec.md) | ✅ written |
-| items/001-plan.md | ⏳ to be authored by Opus `superpowers:writing-plans` |
+| [items/001-plan.md](items/001-plan.md) | ✅ written by Opus `superpowers:writing-plans` (commit `366eda7`, 100 steps, 29 TDD test steps) |
 | items/001-drift.md | ⏳ |
 | items/001-ship.md | ⏳ |
 | items/001-verify.md | ⏳ |

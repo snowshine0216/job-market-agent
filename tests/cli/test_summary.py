@@ -17,14 +17,14 @@ from jma.domain.models import (
 def _job(*, status: UrlStatus, checked: bool, suffix: str = "") -> Job:
     return Job(
         id=job_id(
-            source="testerhome",
+            source="bing:zhipin.com",
             internal_id=f"{status.value}{suffix}",
             title="t",
             company=None,
             city=None,
         ),
         canonical_id=canonical_id(title=f"t{suffix}", company=None, city=None),
-        source="testerhome",
+        source="bing:zhipin.com",
         title="t",
         title_raw="t",
         location=Location(),
@@ -45,7 +45,7 @@ def test_summary_includes_gone_count_when_detail_ran() -> None:
         _job(status=UrlStatus.GONE, checked=True, suffix="c"),
     )
     result = SourceResult(
-        source="testerhome",
+        source="bing:zhipin.com",
         status=SourceStatus.OK,
         jobs=jobs,
         pages_fetched=1,
@@ -58,14 +58,14 @@ def test_summary_includes_gone_count_when_detail_ran() -> None:
         results=[result],
         db_path=Path("/tmp/x.db"),
     )
-    src_line = next(line for line in lines if line.startswith("  testerhome"))
+    src_line = next(line for line in lines if line.startswith("  bing:zhipin.com"))
     assert "gone_urls=2" in src_line
 
 
 def test_summary_includes_gone_zero_when_detail_ran_and_all_live() -> None:
     jobs = (_job(status=UrlStatus.LIVE, checked=True, suffix="a"),)
     result = SourceResult(
-        source="testerhome",
+        source="bing:zhipin.com",
         status=SourceStatus.OK,
         jobs=jobs,
         pages_fetched=1,
@@ -78,7 +78,7 @@ def test_summary_includes_gone_zero_when_detail_ran_and_all_live() -> None:
         results=[result],
         db_path=Path("/tmp/x.db"),
     )
-    src_line = next(line for line in lines if line.startswith("  testerhome"))
+    src_line = next(line for line in lines if line.startswith("  bing:zhipin.com"))
     assert "gone_urls=0" in src_line
 
 
@@ -90,7 +90,7 @@ def test_summary_omits_gone_segment_for_listing_only_crawl() -> None:
         _job(status=UrlStatus.UNKNOWN, checked=False, suffix="b"),
     )
     result = SourceResult(
-        source="testerhome",
+        source="bing:zhipin.com",
         status=SourceStatus.OK,
         jobs=jobs,
         pages_fetched=1,
@@ -103,5 +103,5 @@ def test_summary_omits_gone_segment_for_listing_only_crawl() -> None:
         results=[result],
         db_path=Path("/tmp/x.db"),
     )
-    src_line = next(line for line in lines if line.startswith("  testerhome"))
+    src_line = next(line for line in lines if line.startswith("  bing:zhipin.com"))
     assert "gone_urls" not in src_line

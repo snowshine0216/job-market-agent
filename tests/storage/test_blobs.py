@@ -40,3 +40,20 @@ def test_same_url_same_day_same_path(tmp_path: Path) -> None:
     assert a == b  # path is deterministic
     # body 'b' overwrote 'a'
     assert read(root=tmp_path, ref=a) == "b"
+
+
+def test_write_with_json_gz_suffix(tmp_path):
+    """Bing source writes SerpAPI JSON page payloads with .json.gz (spec §3.6, §5.4)."""
+    from jma.storage import blobs
+
+    ref = blobs.write(
+        root=tmp_path,
+        source="bing",
+        url="https://serpapi.com/search?q=foo&start=0",
+        body='{"organic_results":[]}',
+        suffix=".json.gz",
+    )
+    assert ref.endswith(".json.gz")
+    assert "raw/bing/" in ref
+    # Round-trip read.
+    assert blobs.read(root=tmp_path, ref=ref) == '{"organic_results":[]}'

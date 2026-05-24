@@ -12,9 +12,9 @@ def _sha1_short(url: str) -> str:
     return hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
 
 
-def _ref(source: str, url: str, when: datetime) -> str:
+def _ref(source: str, url: str, when: datetime, suffix: str) -> str:
     ymd = when.astimezone(UTC).strftime("%Y%m%d")
-    return f"raw/{source}/{ymd}/{_sha1_short(url)}.html.gz"
+    return f"raw/{source}/{ymd}/{_sha1_short(url)}{suffix}"
 
 
 def write(
@@ -23,10 +23,11 @@ def write(
     source: str,
     url: str,
     body: str,
+    suffix: str = ".html.gz",
     now: datetime | None = None,
 ) -> str:
     when = now or datetime.now(UTC)
-    ref = _ref(source, url, when)
+    ref = _ref(source, url, when, suffix)
     full = Path(root) / ref
     full.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(full, "wb") as f:

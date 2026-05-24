@@ -169,8 +169,8 @@
         <!-- ======================================================
              TABLE: run_jobs (junction, mid-left)
              ====================================================== -->
-        <rect x="40" y="440" width="280" height="120" rx="6" fill="#0f172a"/>
-        <rect x="40" y="440" width="280" height="120" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="40" y="440" width="280" height="148" rx="6" fill="#0f172a"/>
+        <rect x="40" y="440" width="280" height="148" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
         <text x="180" y="462" fill="white" font-size="13" font-weight="700" text-anchor="middle">run_jobs</text>
         <text x="180" y="476" fill="#a78bfa" font-size="8" text-anchor="middle">junction: many runs ↔ many jobs</text>
         <line x1="50" y1="484" x2="310" y2="484" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
@@ -183,8 +183,11 @@
         <text x="86" y="515" fill="white" font-size="9">job_id</text>
         <text x="200" y="515" fill="#fb7185" font-size="8">FK → jobs.id</text>
 
-        <text x="56" y="540" fill="#22d3ee" font-size="7">idx (job_id)</text>
-        <text x="56" y="552" fill="#94a3b8" font-size="7">INSERT OR IGNORE on duplicate (run, job)</text>
+        <text x="56" y="530" fill="white" font-size="9">raw_payload_ref</text>
+        <text x="56" y="544" fill="#fbbf24" font-size="7">→ blob path for this Run's page · NOT NULL · ADR-0005</text>
+
+        <text x="56" y="560" fill="#22d3ee" font-size="7">idx (job_id)</text>
+        <text x="56" y="572" fill="#94a3b8" font-size="7">INSERT OR IGNORE on duplicate (run, job)</text>
 
         <!-- ======================================================
              TABLE: jobs (center, the big one)
@@ -205,7 +208,7 @@
         <text x="600" y="165" fill="#34d399" font-size="8">sha1(title|company|city) — cross-source</text>
 
         <text x="440" y="180" fill="white" font-size="9">source</text>
-        <text x="600" y="180" fill="#94a3b8" font-size="8">TEXT (e.g. "testerhome")</text>
+        <text x="600" y="180" fill="#94a3b8" font-size="8">TEXT · e.g. "bing:zhipin.com" (WHERE source LIKE 'bing:%')</text>
 
         <text x="440" y="195" fill="white" font-size="9">source_internal_id</text>
         <text x="600" y="195" fill="#94a3b8" font-size="8">TEXT, nullable</text>
@@ -280,7 +283,7 @@
         <text x="440" y="735" fill="white" font-size="9">raw_payload_ref</text>
         <text x="600" y="735" fill="#fbbf24" font-size="8">→ raw HTML blob path</text>
         <text x="440" y="750" fill="white" font-size="9">data_quality</text>
-        <text x="600" y="750" fill="#94a3b8" font-size="8">REAL DEFAULT 1.0</text>
+        <text x="600" y="750" fill="#94a3b8" font-size="8">0.4 snippet · 0.9 detail-enriched (Ph2.1, reserved) · 0.7 LLM (Ph3) · 1.0 full</text>
         <text x="440" y="765" fill="white" font-size="9">url_status</text>
         <text x="600" y="765" fill="#fb7185" font-size="8">live | gone | unknown</text>
         <text x="440" y="780" fill="white" font-size="9">url_last_checked_at</text>
@@ -326,8 +329,8 @@
              ====================================================== -->
         <rect x="380" y="855" width="500" height="50" rx="6" fill="#0f172a"/>
         <rect x="380" y="855" width="500" height="50" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3"/>
-        <text x="630" y="875" fill="white" font-size="12" font-weight="700" text-anchor="middle">data/raw/{source}/{yyyymmdd}/{sha1(url)[:16]}.html.gz</text>
-        <text x="630" y="893" fill="#fbbf24" font-size="9" text-anchor="middle">gzipped raw HTML — written by storage/blobs.py — referenced by string path</text>
+        <text x="630" y="875" fill="white" font-size="12" font-weight="700" text-anchor="middle">data/raw/{source}/{yyyymmdd}/{sha1(url)[:16]}.{html|json}.gz</text>
+        <text x="630" y="893" fill="#fbbf24" font-size="9" text-anchor="middle">gzipped raw payload — .html.gz (Phase 1) · .json.gz (Phase 2 Bing SerpAPI pages) — storage/blobs.py · ADR-0005</text>
 
         <!-- Legend -->
         <text x="60" y="620" fill="white" font-size="10" font-weight="600">Legend</text>
@@ -390,7 +393,7 @@
     </div>
 
     <p class="footer">
-      jma — Phase 1 storage schema · src/jma/storage/db.py · WAL mode, foreign_keys=ON
+      jma — Phase 2 storage schema · src/jma/storage/db.py · WAL mode, foreign_keys=ON · ADR-0001 (canonical_id) · ADR-0002 (always-finish) · ADR-0003 (url freshness) · ADR-0005 (bing:&lt;host&gt; source naming, .json.gz blobs, run_jobs.raw_payload_ref) · 2026-05-24
     </p>
   </div>
 

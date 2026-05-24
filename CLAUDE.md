@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`jma` — a Python 3.12 CLI that crawls job postings, persists them to SQLite + gzipped raw HTML blobs, and (later phases) produces market-overview and personal-fit reports. Phase 1 ships only the TesterHome crawler vertical slice; multi-source, LLM extraction, and reports come in later phases. See [PLAN.md](PLAN.md) for the full phase plan and locked decisions.
+`jma` — a Python 3.12 CLI that crawls job postings, persists them to SQLite + gzipped raw blobs, and (later phases) produces market-overview and personal-fit reports. Phase 1 shipped the TesterHome vertical slice (since retired); Phase 2 replaces it with the Bing aggregator (SerpAPI) plus the `jma view` static-HTML viewer. LLM extraction and the market/fit reports come in later phases. See [PLAN.md](PLAN.md) for the full phase plan and locked decisions.
 
 ## Tooling — uv
 
@@ -17,7 +17,7 @@ uv run jma crawl --region Hangzhou --keywords "ai agent"
 uv run pytest                            # full test suite (live tests skipped by default)
 uv run pytest tests/domain               # one directory
 uv run pytest tests/domain/test_dedup.py::test_name   # one test
-uv run pytest -m live                    # opt-in: real network hits (TesterHome)
+uv run pytest -m live                    # opt-in: real network hits (Bing SerpAPI)
 uv run ruff check .                      # lint
 uv run ruff format .                     # format
 ```
@@ -37,15 +37,18 @@ src/jma/
 │                     mutation, no logging.
 ├── sources/          One JobSource per site. base.py defines the Protocol +
 │                     YAML SourceConfig loader; http.py is the rate-limited
-│                     httpx wrapper; testerhome.py is the Phase-1 implementation.
+│                     httpx wrapper; bing.py is the Phase-2 SerpAPI aggregator.
 ├── pipeline/crawl.py Orchestrator. Opens DB, starts a Run, injects on_fetch /
 │                     cache_get callbacks into the source factory, persists
 │                     JobObservations + finishes the Run (even on exception).
+├── report/           PURE. build_view_context(run, jobs, data_root_abs) → dict.
+│                     cli.py view does the I/O (DB read, Jinja2 render,
+│                     file write, optional 'open' shell-out).
 └── storage/          SQLite (db.py — runs + jobs tables, WAL mode), gzipped
-                      raw HTML blobs (blobs.py), 24h URL cache (cache.py).
+                      raw blobs (blobs.py — .json.gz for Bing), 24h URL cache (cache.py).
 ```
 
-**Source plug-in contract** (`sources/base.py`): a `JobSource` is anything with a `name` and an `async crawl(region, keywords, max_pages, max_jobs) -> SourceResult`. Per-site behavior is split between Python class + `config/sources/<name>.yaml` (selectors, URL template, rate limits). To add a source: drop a YAML file in `config/sources/`, write a class implementing the Protocol, and register a factory in `cli.py`.
+**Source plug-in contract** (`sources/base.py`): a `JobSource` is anything with a `name` and an `async crawl(region, keywords, max_pages, max_jobs) -> SourceResult`. Per-site behavior is split between Python class + `config/sources/<name>.yaml` (selectors, URL template, rate limits). The `source` field on emitted `Job` rows uses the `bing:<host>` form (e.g. `bing:zhipin.com`) per ADR-0005. To add a source: drop a YAML file in `config/sources/`, write a class implementing the Protocol, and register a factory in `cli.py`.
 
 **Why the factory-with-callbacks pattern** (`pipeline/crawl.py`): the pipeline owns the DB connection and URL cache, but the source owns the HTTP fetching. Callbacks (`on_fetch`, `cache_get`) let the source call back into storage without importing it. A probe-instance is built first to discover `source.name`, then the real instance is built with name-aware callbacks.
 
@@ -75,20 +78,20 @@ Pure functions in `domain/`; effects live at the edges (`sources/`, `storage/`).
 
 ## Runtime data
 
-`data/` is gitignored except for its `.gitignore`. The CLI resolves it via `JMA_DATA_ROOT` env var, falling back to `./data/`. `data/jobs.db` is the SQLite store; `data/raw/<source>/<sha>.html.gz` holds raw blobs referenced by `Job.raw_payload_ref`.
+`data/` is gitignored except for its `.gitignore`. The CLI resolves it via `JMA_DATA_ROOT` env var, falling back to `./data/`. `data/jobs.db` is the SQLite store; `data/raw/<source>/<yyyymmdd>/<sha>.json.gz` holds raw blobs (Phase 2: SerpAPI JSON pages) referenced by `Job.raw_payload_ref`.
 
 ## Workflow charts
 
 Self-contained HTML diagrams in `docs/diagrams/`:
 
-- [phase-1-testerhome-crawl.html](docs/diagrams/phase-1-testerhome-crawl.html) — the implemented Phase-0/1 crawl pipeline (cli → pipeline → source → storage).
+- [phase-2-bing-aggregator-crawl.html](docs/diagrams/phase-2-bing-aggregator-crawl.html) — the Phase-2 crawl pipeline (cli → pipeline → bing source → storage), with per-page SerpAPI fetches and per-Run blob refs.
 - [plan-phases-workflow.html](docs/diagrams/plan-phases-workflow.html) — the full multi-phase plan from [PLAN.md](PLAN.md), showing where the current slice sits.
-- [database-schema.html](docs/diagrams/database-schema.html) — SQLite schema for `data/jobs.db` (runs, jobs, run_jobs, url_cache) plus the gzipped raw HTML blob path, annotated with ADR-0001/0002/0003.
-- [module-dependency.html](docs/diagrams/module-dependency.html) — import graph across `src/jma/`: cli → pipeline → sources/ + storage/ → domain/ (pure island).
+- [database-schema.html](docs/diagrams/database-schema.html) — SQLite schema for `data/jobs.db` (runs, jobs, run_jobs, url_cache) plus the gzipped raw blob path, annotated with ADR-0001/0002/0003/0005.
+- [module-dependency.html](docs/diagrams/module-dependency.html) — import graph across `src/jma/`: cli → pipeline → sources/ + storage/ → domain/ (pure island); report/view.py (pure).
 
 Open in a browser to see the rendered flow. Keep these in sync when the relevant shape changes:
 
-- **pipeline shape** (new source, new stage, new storage layer) → update `phase-1-testerhome-crawl.html` and `plan-phases-workflow.html`.
+- **pipeline shape** (new source, new stage, new storage layer) → update `phase-2-bing-aggregator-crawl.html` and `plan-phases-workflow.html`.
 - **DB schema** (new column, table, index, FK, or `_DDL`/migration edit in `src/jma/storage/db.py`) → update `database-schema.html`.
 - **Module dependencies** (new module, new cross-module import, or a change that breaks the `domain/` pure-island invariant) → update `module-dependency.html`.
 

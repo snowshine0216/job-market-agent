@@ -14,7 +14,6 @@ from jma.domain.models import SourceResult, SourceStatus, UrlStatus
 from jma.pipeline.crawl import run as pipeline_run
 from jma.sources.base import JobSource, load_source_config
 from jma.sources.http import AsyncHttpClient
-from jma.sources.testerhome import TesterHomeSource
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -34,18 +33,40 @@ def _data_root() -> Path:
     return Path.cwd() / "data"
 
 
-def _factory_for(source_name: str, data_root: Path, with_detail: bool):
+def _check_required_env_for_sources(source_names: list[str]) -> None:
+    """Raise typer.Exit(1) with a clear message if any selected source's
+    api_key_env is unset. Runs after Typer arg parsing, before the DB opens
+    (spec §2 row 9). Pure on env state."""
+    for name in source_names:
+        try:
+            cfg = load_source_config(_CFG_DIR / f"{name}.yaml")
+        except FileNotFoundError:
+            continue  # _factory_for will raise a clearer error later
+        env_name = getattr(cfg, "api_key_env", None)
+        if env_name and not os.environ.get(env_name):
+            typer.echo(f"missing env var {env_name} (required by source {name!r})", err=True)
+            raise typer.Exit(code=1)
+
+
+def _factory_for(source_name: str, data_root: Path):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
-    if with_detail:
-        cfg = cfg.model_copy(update={"detail": cfg.detail.model_copy(update={"enabled": True})})
+    if source_name == "bing":
+        # Lazy import so `jma view` works even if jma.sources.bing has a syntax-time issue.
+        from jma.sources.bing import BingAggregatorSource
 
-    def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
-        http = AsyncHttpClient(ac, rate=cfg.rate)
-        return TesterHomeSource(
-            cfg=cfg, http=http, data_root=data_root, on_fetch=on_fetch, cache_get=cache_get
-        )
+        def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
+            http = AsyncHttpClient(ac, rate=cfg.rate)
+            return BingAggregatorSource(
+                cfg=cfg,
+                http=http,
+                data_root=data_root,
+                api_key=os.environ[cfg.api_key_env],
+                on_fetch=on_fetch,
+                cache_get=cache_get,
+            )
 
-    return _make
+        return _make
+    raise KeyError(f"unknown source: {source_name!r}")
 
 
 def _summary_lines(
@@ -91,24 +112,18 @@ def crawl(
         ..., "--region", help="Region (e.g. Hangzhou). Empty disables region filter."
     ),
     keywords: list[str] = typer.Option(..., "--keywords", help="Repeatable keyword phrase."),
-    source: list[str] = typer.Option(["testerhome"], "--source", help="Source name (repeatable)."),
+    source: list[str] = typer.Option(["bing"], "--source", help="Source name (repeatable)."),
     max_pages: int = typer.Option(5, "--max-pages"),
     max_jobs: int = typer.Option(300, "--max-jobs"),
     no_cache: bool = typer.Option(False, "--no-cache"),
-    with_detail: bool = typer.Option(
-        False,
-        "--with-detail/--no-detail",
-        help=(
-            "Fetch each job's detail page to populate company/salary "
-            "(slower; adds N HTTP calls per page)."
-        ),
-    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    # Fail fast on missing env vars required by selected sources (spec §2 row 9).
+    _check_required_env_for_sources(source)
     keywords_t = tuple(keywords)
     data_root = _data_root()  # resolve once; used in factory, pipeline, and summary
     db_path = data_root / "jobs.db"
@@ -120,7 +135,7 @@ def crawl(
             run_id, results = await pipeline_run(
                 region=region,
                 keywords=keywords_t,
-                source_factory=_factory_for(s_name, data_root, with_detail=with_detail),
+                source_factory=_factory_for(s_name, data_root),
                 db_path=db_path,
                 data_root=data_root,
                 max_pages=max_pages,
@@ -143,3 +158,71 @@ def crawl(
         typer.echo(line)
 
     raise typer.Exit(code=_exit_code(results))
+
+
+@app.command()
+def view(
+    run: str | None = typer.Option(
+        None, "--run", help="Render this specific run id (full hex). Defaults to latest finished."
+    ),
+    out: Path | None = typer.Option(
+        None, "--out", help="Output path. Defaults to {data_root}/view.html."
+    ),
+    open_browser: bool = typer.Option(
+        False,
+        "--open",
+        help="Open the rendered file in the default browser after writing.",
+    ),
+) -> None:
+    """Render the latest finished run (or --run <id>) to a static HTML page."""
+    import shutil
+    import subprocess
+    import sys
+
+    import jinja2
+
+    from jma.report.view import build_view_context
+    from jma.storage.db import get_run, jobs_for_run, latest_finished_run, open_db
+
+    data_root = _data_root()
+    db_path = data_root / "jobs.db"
+    out_path = out if out is not None else (data_root / "view.html")
+
+    async def _go() -> tuple[str, int]:
+        ctx_db = await open_db(db_path)
+        async with ctx_db as conn:
+            if run is None:
+                run_row = await latest_finished_run(conn)
+                if run_row is None:
+                    typer.echo(
+                        f"no finished runs in {db_path}; run 'jma crawl ...' first", err=True
+                    )
+                    raise typer.Exit(code=2)
+            else:
+                run_row = await get_run(conn, run)
+                if run_row is None:
+                    typer.echo(f"no run {run} in {db_path}", err=True)
+                    raise typer.Exit(code=2)
+                if run_row.finished_at is None:
+                    typer.echo(f"run {run} is not finished; nothing to render", err=True)
+                    raise typer.Exit(code=2)
+            jobs = await jobs_for_run(conn, run_row.id)
+
+        context = build_view_context(run_row, jobs, data_root.resolve())
+        template_dir = Path(__file__).resolve().parent / "report" / "templates"
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(str(template_dir)),
+            autoescape=jinja2.select_autoescape(["html", "xml", "j2"]),
+        )
+        html = env.get_template("view.html.j2").render(**context)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html, encoding="utf-8")
+        return run_row.id, len(jobs)
+
+    rendered_run_id, n = asyncio.run(_go())
+    typer.echo(f"wrote {out_path} (run {rendered_run_id[:8]}, {n} observations)")
+
+    if open_browser:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        if shutil.which(opener):
+            subprocess.run([opener, str(out_path)], check=False)
