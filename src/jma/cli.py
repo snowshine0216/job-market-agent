@@ -160,3 +160,71 @@ def crawl(
         typer.echo(line)
 
     raise typer.Exit(code=_exit_code(results))
+
+
+@app.command()
+def view(
+    run: str | None = typer.Option(
+        None, "--run", help="Render this specific run id (full hex). Defaults to latest finished."
+    ),
+    out: Path | None = typer.Option(
+        None, "--out", help="Output path. Defaults to {data_root}/view.html."
+    ),
+    open_browser: bool = typer.Option(
+        False,
+        "--open",
+        help="Open the rendered file in the default browser after writing.",
+    ),
+) -> None:
+    """Render the latest finished run (or --run <id>) to a static HTML page."""
+    import shutil
+    import subprocess
+    import sys
+
+    import jinja2
+
+    from jma.report.view import build_view_context
+    from jma.storage.db import get_run, jobs_for_run, latest_finished_run, open_db
+
+    data_root = _data_root()
+    db_path = data_root / "jobs.db"
+    out_path = out if out is not None else (data_root / "view.html")
+
+    async def _go() -> tuple[str, int]:
+        ctx_db = await open_db(db_path)
+        async with ctx_db as conn:
+            if run is None:
+                run_row = await latest_finished_run(conn)
+                if run_row is None:
+                    typer.echo(
+                        f"no finished runs in {db_path}; run 'jma crawl ...' first", err=True
+                    )
+                    raise typer.Exit(code=2)
+            else:
+                run_row = await get_run(conn, run)
+                if run_row is None:
+                    typer.echo(f"no run {run} in {db_path}", err=True)
+                    raise typer.Exit(code=2)
+                if run_row.finished_at is None:
+                    typer.echo(f"run {run} is not finished; nothing to render", err=True)
+                    raise typer.Exit(code=2)
+            jobs = await jobs_for_run(conn, run_row.id)
+
+        context = build_view_context(run_row, jobs, data_root.resolve())
+        template_dir = Path(__file__).resolve().parent / "report" / "templates"
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(str(template_dir)),
+            autoescape=jinja2.select_autoescape(["html", "xml", "j2"]),
+        )
+        html = env.get_template("view.html.j2").render(**context)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html, encoding="utf-8")
+        return run_row.id, len(jobs)
+
+    rendered_run_id, n = asyncio.run(_go())
+    typer.echo(f"wrote {out_path} (run {rendered_run_id[:8]}, {n} observations)")
+
+    if open_browser:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        if shutil.which(opener):
+            subprocess.run([opener, str(out_path)], check=False)
