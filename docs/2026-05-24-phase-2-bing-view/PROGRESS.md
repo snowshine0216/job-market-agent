@@ -50,6 +50,11 @@ Collapsed-scope (spec mode N=1, no cross-item interaction analysis applicable):
 
 Run complete. `.autodev-current` removed at repo root. The run directory persists in git history as the durable record.
 
+**Feature-branch PR (roll-up, opened post-hoc per user request):** [#25](https://github.com/snowshine0216/job-market-agent/pull/25) — `autodev/phase-2-bing-view-feature` → `main`. Opened, not merged. Left open for user review.
+
+Feature branch: `autodev/phase-2-bing-view-feature`
+Merged into protected branch: no (PR #25 left open for user review)
+
 Follow-up issues spun out of this run (not blocking — operator's choice):
 - Capture `tests/fixtures/serpapi_bing_hangzhou_ai_agent.json` from one real SerpAPI call (spec §6) to un-skip the snippet-richness end-to-end test.
 - 13 deferred P1 nits enumerated in [items/001-review.md](items/001-review.md) (no httpx timeout, region-alias log-level, `_parse_iso` swallow, etc.) — each is a small follow-up PR candidate.
