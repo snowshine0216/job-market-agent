@@ -14,7 +14,7 @@ and `docs/adr/`, not here.
 A real-world job posting that exists (or recently existed) on at least one
 recruiting site. A Job is identified by its content — title, company, and
 city — not by which site we found it on. The same Job can be seen by
-multiple sources (e.g. surfaced both on TesterHome and on
+multiple sources (e.g. surfaced on both `bing:zhipin.com` and on
 `bing:zhaopin.com`); collapsing those into one Job is the responsibility of
 aggregation queries, not the crawl path.
 
@@ -116,10 +116,13 @@ The named origin of a [[JobObservation]]. Written as
 `<crawler>[':' <origin_site>]`:
 
 - **Direct crawler** — a site we fetch and parse directly. Source is just
-  the crawler name: `testerhome`, `randstad`.
+  the crawler name (e.g. `randstad`). TesterHome was the Phase-1 direct crawler
+  (retired in Phase 2 — volume too low for AI-eng market stats).
 - **Aggregator** — a search engine or meta-site that surfaces JDs hosted
-  on third-party sites. Source is the crawler name plus the third-party
-  hostname: `bing:zhaopin.com`, `bing:liepin.com`.
+  on third-party sites. Source is the crawler name plus the matched
+  `target_sites` entry (subdomain-collapsed): `bing:zhipin.com`,
+  `bing:lagou.com`, `bing:liepin.com`, `bing:51job.com`, `bing:zhaopin.com`.
+  Phase 2 ships only the Bing aggregator via SerpAPI (ADR-0005).
 
 Implications:
 - `source_internal_id` for an aggregator-prefixed source is the

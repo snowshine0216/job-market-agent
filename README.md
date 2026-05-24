@@ -2,16 +2,15 @@
 
 A small async crawler that pulls job listings from configured sources, normalises
 them into a frozen domain model, and persists observations to SQLite. The first
-shipping source is [TesterHome](https://testerhome.com/jobs).
+shipping source is the Bing aggregator via [SerpAPI](https://serpapi.com/) (Bing engine), covering BOSS Zhipin, Lagou, Liepin, 51job, and Zhilian via one `site:` query.
 
-> **Status:** Phase 0 + Phase 1 of [PLAN.md](PLAN.md) — project bootstrap and
-> the TesterHome vertical slice. Multi-source crawling, LLM extraction, and the
-> reporting CLIs land in later phases.
+> **Status:** Phase 0 + Phase 1 + Phase 2 of [PLAN.md](PLAN.md) — project bootstrap, the original TesterHome vertical slice (since retired), and the Bing-aggregator + `jma view` shipping surface. LLM extraction and the market/fit reports land in later phases.
 
 ## Prerequisites
 
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/) for dependency + venv management
+- `SERPAPI_KEY` environment variable — sign up at https://serpapi.com (free tier: 100 queries/month)
 
 ## Install
 
@@ -41,40 +40,53 @@ uv run jma crawl --region Hangzhou --keywords "AI agent"
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--source <name>` | `testerhome` | Which registered source to crawl. Repeatable. Phase 1 ships only TesterHome. |
+| `--source <name>` | `bing` | Which registered source to crawl. Repeatable. Phase 2 ships only `bing` (SerpAPI Bing aggregator). |
 | `--max-pages <int>` | `5` | Stop after this many listing pages. |
 | `--max-jobs <int>` | `300` | Stop after this many observations are collected (truncated to exactly N). |
 | `--no-cache` | off | Skip the 24h URL cache for fetches. Cache rows are still written. |
-| `--with-detail` / `--no-detail` | off | Fetch each job's detail page to populate `company`/`salary` and tag URL freshness (`url_status`). Adds N HTTP calls per listing page; respects `delay_ms`. Default off — listing-only crawls do not check URLs. |
 | `-v` / `--verbose` | off | Lift log level to `DEBUG`. |
 
 ### Example output
 
 ```
+$ export SERPAPI_KEY=...
+$ uv run jma crawl --region Hangzhou --keywords "AI agent"
 run_id        : 4f8c2a1b7e9d6c5af0d3e89c1a2b3c4d
 region        : Hangzhou
 keywords      : AI agent
 sources:
-  testerhome  : ok    pages=3  jobs=47   elapsed=4.1s
-written       : 47 observations to data/jobs.db
-```
-
-With `--with-detail`, the summary also reports how many of the just-fetched URLs returned 404/410 (`gone_urls`). Listing-only crawls omit the segment entirely so the operator can distinguish "we didn't check" from "we checked, none gone":
-
-```
-testerhome  : ok    pages=3  jobs=47   gone_urls=2   elapsed=12.6s
+  bing       : ok    pages=5  jobs=180   elapsed=8.4s
+written       : 180 observations to data/jobs.db
 ```
 
 Partial harvest (an earlier page succeeded, a later page was rate-limited):
 
 ```
-testerhome  : ok    pages=2  jobs=21   elapsed=2.4s  partial: stopped at page 3 (rate_limited: HTTP 429; Retry-After=30s)
+bing        : ok    pages=2  jobs=21   elapsed=2.4s  partial: stopped at page 3 (rate_limited: HTTP 429; Retry-After=30s)
 ```
 
 Hard block (page 1 blocked):
 
 ```
-testerhome  : blocked  reason="HTTP 403"  pages=1  jobs=0
+bing        : blocked  reason="HTTP 403"  pages=1  jobs=0
+```
+
+### Verify a crawl
+
+`jma view` renders the latest finished run as a self-contained static HTML page
+— sortable, no web server, links to each job's URL and per-Run raw blob.
+
+```
+uv run jma view              # writes data/view.html for the latest finished run
+uv run jma view --open       # also opens it in your default browser
+uv run jma view --run <id>   # render a specific run (full hex id)
+```
+
+If you're starting fresh after the Phase 2 upgrade, wipe the legacy data first:
+
+```
+rm -f data/jobs.db data/jobs.db-shm data/jobs.db-wal
+rm -rf data/raw/testerhome
 ```
 
 ### Exit codes
@@ -90,10 +102,11 @@ Everything goes under `data/` (gitignored end-to-end):
 ```
 data/
 ├── jobs.db                     # SQLite — runs, jobs (observations), run_jobs, url_cache
+├── view.html                   # latest jma view render (overwritten each time)
 └── raw/
-    └── testerhome/
-        └── 20260521/
-            └── <sha1>.html.gz  # gzipped raw listing HTML, one file per fetched URL
+    └── bing/
+        └── 20260524/
+            └── <sha1>.json.gz  # gzipped raw SerpAPI JSON page, one file per fetched page
 ```
 
 The schema (`runs` + `jobs` + `run_jobs` join + `url_cache`) is bootstrapped
@@ -111,12 +124,13 @@ the `run_jobs` join table — see
 
 ### URL freshness
 
-When run with `--with-detail`, each job's detail page is fetched and the
-result is recorded on the `jobs` row as `url_status` (`live` / `gone` /
-`unknown`) plus `url_last_checked_at`. Only definitive HTTP outcomes
-(200, 404, 410) update these fields; transient outcomes (3xx, 429, 5xx,
-network errors) preserve whatever signal was last earned, so a flaky
-fetch never erases a previously-confirmed `live` or `gone`. See
+`jobs.url_status` (`live` / `gone` / `unknown`) and `url_last_checked_at` record
+the result of the most recent URL probe. In Phase 2, detail-fetch is deferred
+(see [ADR-0005](docs/adr/0005-bing-aggregator-source-and-snippet-data-quality.md)),
+so all Phase 2 rows start as `unknown`. Only definitive HTTP outcomes (200, 404,
+410) update these fields; transient outcomes (3xx, 429, 5xx, network errors)
+preserve whatever signal was last earned, so a flaky fetch never erases a
+previously-confirmed `live` or `gone`. See
 [ADR-0003](docs/adr/0003-url-freshness-as-durable-signal.md) and the
 [CONTEXT.md URL freshness section](CONTEXT.md#url-freshness) for the
 durable-signal model.
@@ -165,12 +179,12 @@ Count unique *Jobs* (deduplicated across observations via `canonical_id` — see
 sqlite3 data/jobs.db "SELECT COUNT(DISTINCT canonical_id) FROM jobs;"
 ```
 
-Inspect the raw HTML the parser actually saw — `raw_payload_ref` on each row
-points at a gzipped blob under `data/raw/<source>/`:
+Inspect the raw SerpAPI JSON the parser actually saw — `raw_payload_ref` on each
+row points at a gzipped blob under `data/raw/<source>/`:
 
 ```bash
 sqlite3 data/jobs.db "SELECT raw_payload_ref FROM jobs LIMIT 1;"
-gunzip -c data/raw/testerhome/<sha>.html.gz | less
+gunzip -c data/raw/bing/<yyyymmdd>/<sha>.json.gz | python3 -m json.tool | less
 ```
 
 Interactive session:
@@ -192,7 +206,7 @@ Prefer a GUI? Install [DB Browser for SQLite](https://sqlitebrowser.org/)
 Source selectors and politeness live in checked-in YAML under `config/`:
 
 ```
-config/sources/testerhome.yaml
+config/sources/bing.yaml
 ```
 
 Selectors, rate (`delay_ms`, `max_retries`, `backoff_base_s`), and content-block
@@ -203,7 +217,7 @@ code is the source of truth; the YAML is the user-editable surface.
 
 ```bash
 uv run pytest           # full suite, live smoke deselected
-uv run pytest -m live   # opt-in TesterHome live smoke (one real fetch)
+uv run pytest -m live   # opt-in Bing live smoke (one real SerpAPI fetch)
 uv run ruff check .     # lint
 ```
 
@@ -217,7 +231,8 @@ Layout:
 src/jma/
 ├── cli.py                Typer entrypoint
 ├── domain/               pure functions — models, normalize, blockage, dedup
-├── sources/              JobSource Protocol, async HTTP client, TesterHome impl
+├── sources/              JobSource Protocol, async HTTP client, BingAggregatorSource
+├── report/               pure context builder (view.py) + Jinja2 templates
 ├── storage/              SQLite, URL cache, gzipped blob writer/reader
 └── pipeline/             single-source crawl orchestration
 ```
