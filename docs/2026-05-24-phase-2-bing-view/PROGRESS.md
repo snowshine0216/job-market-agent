@@ -4,7 +4,7 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 
 | id | spec | grill | plan | branch | impl | drift | PR (ship) | verify | review | pr-review | fix | merge |
 |----|------|-------|------|--------|------|-------|-----------|--------|--------|-----------|-----|-------|
-| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ✅ [#24](https://github.com/snowshine0216/job-market-agent/pull/24) | ✅ [001-verify.md](items/001-verify.md) | ✅ [001-review.md](items/001-review.md) | ✅ [001-pr-review.md](items/001-pr-review.md) | ✅ 1 round (`d1e13f2`) | ⏳ |
+| 001 | ⏭️ user-provided | ⏭️ user-grilled | ✅ | ✅ `claude/phase-2-bing-view-001` | ✅ `d24d289` | ✅ [001-drift.md](items/001-drift.md) | ✅ [#24](https://github.com/snowshine0216/job-market-agent/pull/24) | ✅ [001-verify.md](items/001-verify.md) | ✅ [001-review.md](items/001-review.md) | ✅ [001-pr-review.md](items/001-pr-review.md) | ✅ 1 round (`d1e13f2`) | ✅ `217e565` (squash) |
 
 ## Notes
 
@@ -18,8 +18,22 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 |------|--------|
 | [items/001-spec.md](items/001-spec.md) | ✅ written |
 | [items/001-plan.md](items/001-plan.md) | ✅ written by Opus `superpowers:writing-plans` (commit `366eda7`, 100 steps, 29 TDD test steps) |
-| items/001-drift.md | ⏳ |
-| items/001-ship.md | ⏳ |
-| items/001-verify.md | ⏳ |
-| items/001-review.md | ⏳ (captured inline from `/ship`) |
-| items/001-pr-review.md | ⏳ |
+| [items/001-drift.md](items/001-drift.md) | ✅ PASS (`5ddaf5d`) |
+| [items/001-ship.md](items/001-ship.md) | ✅ PR #24 (`07535d8`) |
+| [items/001-ship-blocked.md](items/001-ship-blocked.md) | ✅ pre-fix snapshot (preserved for audit) |
+| [items/001-verify.md](items/001-verify.md) | ✅ PASS — 6/6 acceptance criteria, 175 tests green (`3e5d263`) |
+| [items/001-review.md](items/001-review.md) | ✅ PASS-WITH-NITS — captured inline from `/ship` 8+9 after P0 fix loop (`b02c7fb`) |
+| [items/001-pr-review.md](items/001-pr-review.md) | ✅ PASS (round 2 after fix `d1e13f2`) — `59eb977` |
+
+## Run summary
+
+- Run: `2026-05-24-phase-2-bing-view` (spec mode, single item, N=1)
+- Project type: non-web (Python CLI — verify branch of post-ship XOR)
+- PR shape: A (per-item PR; user did not opt into `--rollup`)
+- Feature branch: `autodev/phase-2-bing-view-feature` (synthetic — `main` is protected)
+- Merged into protected branch: **no** (left open for user review)
+- Sub-branch: `claude/phase-2-bing-view-001` (squash-merged + deleted)
+- Squash merge commit: `217e565` on the feature branch
+- Total commits before squash: 23 (19 plan tasks + 1 lint reformat + 3 P0/P1 fixes + 1 latent-bug fix + verdict/ship artifacts)
+- Tests: 175 passed / 1 skipped (SerpAPI fixture) / 1 deselected (live marker)
+- Fix rounds: 1 (single round-1 latent-bug `blobs.read FileNotFoundError`)
