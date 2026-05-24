@@ -1,4 +1,11 @@
-"""JobSource Protocol + SourceConfig loader (spec §7.1, §7.2)."""
+"""JobSource Protocol + SourceConfig loader (Phase 2: Bing-shaped).
+
+The old TesterHome-shaped SourceConfig (with ListingConfig / DetailConfig /
+content_block_markers / known_good_list_selector / base_url) was deleted
+when TesterHomeSource was retired in Phase 2. A discriminated-union shape
+(direct: DirectCrawlConfig | None + aggregator: AggregatorConfig | None)
+is deferred until a second source ships that genuinely needs both branches.
+"""
 
 from __future__ import annotations
 
@@ -11,25 +18,6 @@ from pydantic import BaseModel, ConfigDict
 from jma.domain.models import SourceResult
 
 
-class ListingConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-    url_template: str
-    list_item_selector: str
-    title_selector: str
-    href_attr: str
-    posted_at_attr: str
-
-
-class DetailConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-    body_selector: str
-    enabled: bool = False
-    company_selectors: tuple[str, ...] = ()
-    company_label_patterns: tuple[str, ...] = ()
-    salary_selectors: tuple[str, ...] = ()
-    salary_label_patterns: tuple[str, ...] = ()
-
-
 class RateConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     delay_ms: int = 800
@@ -39,14 +27,19 @@ class RateConfig(BaseModel):
 
 
 class SourceConfig(BaseModel):
+    """Bing-aggregator shape. See config/sources/bing.yaml."""
+
     model_config = ConfigDict(frozen=True)
     name: str
-    base_url: str
-    listing: ListingConfig
-    detail: DetailConfig
-    requires_browser: bool = False
-    content_block_markers: tuple[str, ...] = ()
-    known_good_list_selector: str
+    engine: str
+    endpoint: str
+    api_key_env: str
+    results_per_query: int = 50
+    target_sites: tuple[str, ...]
+    id_patterns: dict[str, str] = {}
+    site_names: dict[str, str] = {}
+    query_template: str
+    region_aliases: dict[str, list[str]] = {}
     rate: RateConfig = RateConfig()
 
 

@@ -17,9 +17,9 @@ do not relitigate later.
 | # | Branch | Why it matters | Options weighed | Decision |
 |---|---|---|---|---|
 | 1 | Stack | Gates scraping libs, LLM SDK, packaging | Python 3.12 + uv · Node ESM · Go | **Python 3.12 + uv** |
-| 2 | v1 sources | Determines crawl mechanism, blockage budget, realism of "comprehensive view" | Lean (2 readable + 1 aggregator) · Aggressive (5+ boards) · Search-engine only | **Lean: TesterHome + Randstad + Bing-aggregator (pluggable `JobSource`)** |
+| 2 | v1 sources | Determines crawl mechanism, blockage budget, realism of "comprehensive view" | Lean (2 readable + 1 aggregator) · Aggressive (5+ boards) · Search-engine only | **Lean: Bing-aggregator (SerpAPI) via pluggable `JobSource`. TesterHome retired in Phase 2 (volume too low for AI-eng market stats); Randstad deferred.** |
 | 3 | Fetch stack | Binary size, container needs, graceful degradation on blockage | httpx-first + Playwright fallback · Playwright everywhere · httpx-only | **httpx + selectolax default; Playwright opt-in via per-source flag** |
-| 4 | Search API | Cost/quota, China-language coverage | Bing · Brave · SerpAPI · Pluggable+Bing | **Bing Web Search v7** (1k free/month, strong zh coverage) |
+| 4 | Search API | Cost/quota, China-language coverage | Bing · Brave · SerpAPI · Pluggable+Bing | **SerpAPI (Bing engine; native Bing v7 retired 2025-08-11)** |
 | 5 | Pipeline | "Don't spam the LLM" constraint — token cost, latency, scalability | 3-stage rules+LLM · One mega-call · Map-reduce LLM · Pure deterministic | **3-stage: rules-first extraction → deterministic pandas aggregation → ONE narrative LLM call** |
 | 6 | Storage | Re-run idempotency, crash recovery, trend analysis | SQLite + raw blobs · JSON-only · DuckDB · In-memory | **SQLite (`data/jobs.db`) + gzipped raw blobs (`data/raw/`); 24h URL-hash cache** |
 | 7 | Blockage detection | Hard v1 requirement: detect & continue, never fail | Structured `SourceResult` hybrid · Status-only · Active probe | **`SourceResult { status, jobs, reason, pages_fetched }`; hybrid HTTP+content+empty detection** |
@@ -87,8 +87,6 @@ job-market-agent/
 │   ├── skills.yaml                      # synonym → canonical (~300 entries)
 │   ├── region_aliases.yaml              # city → multilingual variants
 │   ├── sources/
-│   │   ├── testerhome.yaml
-│   │   ├── randstad.yaml
 │   │   └── bing.yaml
 │   └── jobs.db                          # gitignored
 ├── src/jma/
@@ -103,10 +101,7 @@ job-market-agent/
 │   ├── sources/
 │   │   ├── base.py                      # JobSource protocol + SourceResult
 │   │   ├── http.py                      # httpx + hybrid blockage classifier
-│   │   ├── browser.py                   # Playwright wrapper
-│   │   ├── testerhome.py
-│   │   ├── randstad.py
-│   │   └── bing.py
+│   │   └── bing.py                     # Phase 2: SerpAPI-backed aggregator
 │   ├── llm/
 │   │   ├── client.py                    # DeepSeek (OpenAI-compatible), retries, disk cache
 │   │   ├── extract.py                   # per-job structured fields
@@ -117,8 +112,9 @@ job-market-agent/
 │   ├── pipeline/{crawl,extract,market,fit}.py
 │   ├── profile/ingest.py
 │   └── report/
-│       ├── render.py
-│       └── templates/{market_en.j2, market_zh.j2, fit_en.j2, fit_zh.j2}
+│       ├── view.py                                          # Phase 2: jma view
+│       ├── render.py                                        # Phase 4+
+│       └── templates/{view.html.j2, market_en.j2, market_zh.j2, fit_en.j2, fit_zh.j2}
 └── tests/                                # mirrors src/jma
     ├── domain/                           # pure, no mocks
     ├── sources/                          # fixture HTML, respx for HTTP
@@ -268,63 +264,47 @@ demo-able stats. That's the justification for "lean MVP, one good source first".
 
 ---
 
-### Phase 2 — Multi-source + blockage robustness · 2 days
+### Phase 2 — Bing aggregator (SerpAPI), `jma view`, TesterHome retirement · 2 days
 
-Add `randstad.py`, `bing.py`, `browser.py` behind the same protocol. Add
-`jma sources status` health-check.
+Three-part Phase 2:
 
-**Real case 2.A — Bing aggregator query construction.**
-For `--region Hangzhou --keywords "AI agent"`, after alias expansion:
+a. **Retire TesterHome.** Volume too low — as a QA/testing community, "AI agent"
+   searches surface mostly test-automation roles; the AI-eng sample is too small
+   for meaningful market stats. Delete the source, YAML, tests, live test, and
+   phase-1 diagram. Wipe the existing `data/jobs.db` and `data/raw/testerhome/`
+   manually (documented; not scripted).
+b. **Add the Bing-aggregator via SerpAPI (snippet-only).** Single source class,
+   multi-site query template, **no detail-fetch in this phase**. Snippet mapped
+   into structured columns (`title`, `posted_at`, `salary`, `experience`);
+   raw snippet text stored in `description_text` as Phase 3's LLM-extraction
+   input. `source = "bing:<host>"` where `<host>` is the matched `target_sites`
+   entry (collapses subdomains; ADR-0005).
+c. **Add `jma view`** — a CLI command that renders one self-contained static
+   HTML page listing every observation in the latest finished run. Sortable
+   client-side via inline ~30-line JS. No web server.
+
+**Real case 2.A — Bing aggregator query construction.** For `--region Hangzhou
+--keywords "AI agent"`, after alias expansion:
 
 ```
-("AI agent" OR "AI 工程师" OR "Agent 工程师")
-  (杭州 OR Hangzhou)
-  (site:zhaopin.com OR site:liepin.com OR site:lagou.com
-   OR site:bosszhipin.com OR site:jobs.51job.com)
-  (招聘 OR hiring OR JD)
-  -inurl:resume
+("AI agent") (Hangzhou OR 杭州 OR 杭州市)
+  (site:zhipin.com OR site:lagou.com OR site:liepin.com OR site:51job.com OR site:zhaopin.com)
+  (招聘 OR hiring OR JD) -inurl:resume
 ```
 
-Bing returns 10–50 results per page. For each: capture `(url, name, snippet,
-datePublished)`. Attempt to fetch the JD page. **Justification for partial-data
-mode:** in a 50-result sample, ~60% of zhaopin/liepin JD fetches fail with the
-captcha soft-block of case 1.B. Instead of dropping those jobs entirely, we
-materialise a `Job` from the Bing snippet alone:
+One SerpAPI call returns up to 50 organic results. `max_pages=N` maps 1:1 to
+N SerpAPI calls (`start = (page - 1) * 50`). The CLI's `--max-pages 5` default
+costs 5 SerpAPI queries per crawl, ~20 crawls/month on the free tier.
 
-```python
-Job(
-    source="bing:zhaopin.com",
-    title=cleaned(result.name),
-    company=extract_company_from_snippet(result.snippet),  # heuristic
-    location=Location(city="Hangzhou", ...),
-    description_text=result.snippet,       # ~200 chars instead of 5k
-    data_quality=0.4,                      # downweights in aggregations
-    salary=parse_salary(result.snippet) or Salary(parsed=False, raw=""),
-    ...
-)
-```
+### Phase 2.1 — Detail-fetch enrichment for Bing — deferred
 
-`data_quality < 0.7` jobs contribute to top-skills counts at half weight and
-are excluded from salary medians (sample size still reported). The market
-report footnotes the share of low-quality rows. This is the concrete shape of
-"detect blocked sources and continue rather than fail".
-
-**Real case 2.B — Randstad requires Playwright in some locales.**
-`https://www.randstad.cn/jobs/?q=AI&l=Hangzhou` returns mostly static HTML.
-But `https://www.randstad.com/jobs/search/?country=hong-kong&q=AI` ships an
-empty `<div id="root">` and hydrates via React. The source config carries:
-
-```yaml
-name: randstad
-variants:
-  - host: www.randstad.cn        # static, httpx OK
-    requires_browser: false
-  - host: www.randstad.com       # JS-rendered
-    requires_browser: true
-```
-
-The `fetch_html(url, source_config)` function dispatches accordingly. Tests
-mock both paths against captured HTML fixtures, no live Playwright in CI.
+**Trigger to re-open:** a live SerpAPI sample where at least one target board's
+detail pages return useful 200s (i.e. evidence that the anti-bot is *not* uniform
+across the target set). **Cost when revived:** extra HTTP budget per crawl, an
+`--with-detail`-style flag, the detail outcome matrix from the original spec
+draft, and a follow-up ADR-0005 clause on no-halt-on-detail-block. The column
+footprint (`url_status`, `url_last_checked_at`, `data_quality=0.9` reserved) is
+already in place.
 
 ---
 
@@ -660,6 +640,9 @@ accumulates — no extra LLM cost, just a diff query.
 |---|---|
 | Randstad CN/HK locales differ in JS-rendering | Source YAML supports `variants` with per-host `requires_browser` flag (Phase 2) |
 | Zhaopin/Liepin JD pages soft-block after Bing snippet leads us there | Snippet-only `Job` with `data_quality=0.4`, downweighted in stats, excluded from salary medians; share of snippet-only rows footnoted in report |
+| SerpAPI rate-limit (100/mo free) | Tight default `max_pages 5`; 24h URL cache covers SerpAPI page URLs; `--no-cache` opt-out for force-refresh; document the $75/mo dev tier in README if hitting the wall |
+| Bing `site:` operator behaviour per board | PLAN intent of cross-board breadth depends on SerpAPI's `site:` behaviour on each board — verify against fixture + opt-in live test before shipping |
+| Snippet-only is the floor of Phase 2 data quality | If a future SerpAPI/Bing change degrades snippet content to title-only, Phase 2 silently drops to title+url+date rows. `tests/live/test_bing_live.py` asserts salary/experience/date richness as a tripwire |
 | Salary parsing edge cases (`面议`, `Competitive`, USD/HKD mixed currency) | Parse-corpus-first TDD (case 1.A); `parsed=false` is a first-class state every aggregator handles |
 | DeepSeek rate limits during extraction burst | `concurrency 4` cap; `sha1(prompt)` disk cache makes re-runs free; exp-backoff on 429 |
 | Skills YAML drift / unmapped novel skills | `data/unmapped_skills.log` records every unmapped extraction; review monthly to grow vocab |
@@ -675,6 +658,10 @@ accumulates — no extra LLM cost, just a diff query.
 - Docx resume — defer to v1.1 unless adoption demand.
 - Live job-board partnerships / official APIs — none publicly available; revisit if one opens.
 - Multi-region market comparison (`Hangzhou vs Shanghai vs Shenzhen`) — natural v1.1 once trend infrastructure exists.
+- Randstad direct crawler, Playwright fallback (`sources/browser.py`), direct
+  BOSS Zhipin crawler — **deferred to a later phase or v1.1 if justified.**
+  Volume coverage solved by Bing across CN boards.
+- **Phase 2.1 — detail-fetch enrichment for Bing.** See Phase 2.1 heading + ADR-0005.
 
 ---
 

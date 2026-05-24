@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 
 import aiosqlite
@@ -6,27 +6,31 @@ import httpx
 import pytest
 import respx
 
-from jma.domain.dedup import canonical_id, job_id
 from jma.domain.models import (
-    Experience,
-    Job,
-    Location,
-    Salary,
     SourceResult,
     SourceStatus,
-    UrlStatus,
 )
 from jma.pipeline.crawl import run
 from jma.sources.base import JobSource, load_source_config
+from jma.sources.bing import BingAggregatorSource
 from jma.sources.http import AsyncHttpClient
-from jma.sources.testerhome import TesterHomeSource
 
 REPO = Path(__file__).resolve().parents[2]
-CFG_PATH = REPO / "config/sources/testerhome.yaml"
-FIX_OK = (REPO / "tests/fixtures/sources/testerhome/listing_ok.html").read_text(encoding="utf-8")
-FIX_EMPTY = (REPO / "tests/fixtures/sources/testerhome/listing_empty.html").read_text(
-    encoding="utf-8"
+CFG_PATH = REPO / "config/sources/bing.yaml"
+
+# Minimal SerpAPI JSON with one on-target result.
+FIX_ONE_JOB = json.dumps(
+    {
+        "organic_results": [
+            {
+                "title": "AI Agent Engineer | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/42.html",
+                "snippet": "Hangzhou 20-40K 3-5年",
+            }
+        ]
+    }
 )
+FIX_EMPTY = json.dumps({"organic_results": []})
 
 
 def _factory(tmp_path: Path):
@@ -37,10 +41,11 @@ def _factory(tmp_path: Path):
 
     def _make(ac: httpx.AsyncClient, on_fetch, cache_get):
         http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
-        return TesterHomeSource(
+        return BingAggregatorSource(
             cfg=cfg,
             http=http,
             data_root=tmp_path,
+            api_key="testkey",
             sleep=_no_sleep,
             on_fetch=on_fetch,
             cache_get=cache_get,
@@ -52,12 +57,7 @@ def _factory(tmp_path: Path):
 @respx.mock
 @pytest.mark.asyncio
 async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -> None:
-    respx.get("https://testerhome.com/jobs?page=1").mock(
-        return_value=httpx.Response(200, text=FIX_OK)
-    )
-    respx.get("https://testerhome.com/jobs?page=2").mock(
-        return_value=httpx.Response(200, text=FIX_EMPTY)
-    )
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=FIX_ONE_JOB))
 
     run_id, source_results = await run(
         region="Hangzhou",
@@ -65,7 +65,7 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
         source_factory=_factory(tmp_path),
         db_path=tmp_path / "data/jobs.db",
         data_root=tmp_path,
-        max_pages=3,
+        max_pages=1,
         max_jobs=100,
         use_cache=True,
     )
@@ -76,8 +76,6 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
     assert len(source_results[0].jobs) >= 1
 
     # DB invariants.
-    import aiosqlite
-
     async with aiosqlite.connect(str(tmp_path / "data/jobs.db")) as conn:
         cur = await conn.execute("SELECT COUNT(*) FROM runs WHERE id=?", (run_id,))
         assert (await cur.fetchone())[0] == 1
@@ -89,11 +87,17 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
         assert canon != ""
         cur = await conn.execute("SELECT COUNT(*) FROM run_jobs WHERE run_id=?", (run_id,))
         assert (await cur.fetchone())[0] == n_jobs
+        # run_jobs.raw_payload_ref is not null (spec §2 row 17)
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM run_jobs WHERE run_id=? AND raw_payload_ref IS NOT NULL",
+            (run_id,),
+        )
+        assert (await cur.fetchone())[0] == n_jobs
         cur = await conn.execute("SELECT COUNT(*) FROM url_cache WHERE status_code=200")
         assert (await cur.fetchone())[0] >= 1
 
-    # Blob present.
-    blobs_dir = tmp_path / "raw/testerhome"
+    # Blob present with .json.gz suffix.
+    blobs_dir = tmp_path / "raw/bing"
     assert blobs_dir.exists()
     assert any(p.suffix == ".gz" for p in blobs_dir.rglob("*"))
 
@@ -107,11 +111,8 @@ async def test_end_to_end_writes_runs_jobs_run_jobs_cache_blob(tmp_path: Path) -
 @pytest.mark.asyncio
 async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
     """L1: URLs fetched < 24h ago must be read from cache; respx call count stays at 0 on run 2."""
-    route1 = respx.get("https://testerhome.com/jobs?page=1").mock(
-        return_value=httpx.Response(200, text=FIX_OK)
-    )
-    route2 = respx.get("https://testerhome.com/jobs?page=2").mock(
-        return_value=httpx.Response(200, text=FIX_EMPTY)
+    route = respx.get("https://serpapi.com/search").mock(
+        return_value=httpx.Response(200, text=FIX_ONE_JOB)
     )
     db_path = tmp_path / "data/jobs.db"
 
@@ -122,35 +123,29 @@ async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
         source_factory=_factory(tmp_path),
         db_path=db_path,
         data_root=tmp_path,
-        max_pages=2,
+        max_pages=1,
         max_jobs=100,
         use_cache=True,
     )
     assert run1_results[0].status == SourceStatus.OK
-    first_call_count_1 = route1.call_count
-    first_call_count_2 = route2.call_count
-    assert first_call_count_1 >= 1  # sanity: did actually fetch on run 1
+    call_count_after_run1 = route.call_count
+    assert call_count_after_run1 >= 1  # sanity: did actually fetch on run 1
 
-    # Run 2 — should hit cache; respx call counts must not increase.
+    # Run 2 — should hit cache; respx call count must not increase.
     run2_id, run2_results = await run(
         region="",
         keywords=("",),
         source_factory=_factory(tmp_path),
         db_path=db_path,
         data_root=tmp_path,
-        max_pages=2,
+        max_pages=1,
         max_jobs=100,
         use_cache=True,
     )
     assert run2_results[0].status == SourceStatus.OK
-    assert route1.call_count == first_call_count_1, (
-        "page 1 was re-fetched despite fresh cache entry"
+    assert route.call_count == call_count_after_run1, (
+        "SerpAPI was re-fetched despite fresh cache entry"
     )
-    assert route2.call_count == first_call_count_2, (
-        "page 2 was re-fetched despite fresh cache entry"
-    )
-    # Both runs produced same jobs.
-    assert len(run1_results[0].jobs) == len(run2_results[0].jobs)
 
 
 # ---------------------------------------------------------------------------
@@ -162,28 +157,17 @@ async def test_second_run_hits_cache_for_fresh_urls(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_no_cache_skips_reads_but_writes(tmp_path: Path) -> None:
     """L1: --no-cache skips cache reads so network is hit both runs; writes still happen."""
-    respx.get("https://testerhome.com/jobs?page=1").mock(
-        return_value=httpx.Response(200, text=FIX_OK)
-    )
-    respx.get("https://testerhome.com/jobs?page=2").mock(
-        return_value=httpx.Response(200, text=FIX_EMPTY)
-    )
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=FIX_ONE_JOB))
     db_path = tmp_path / "data/jobs.db"
 
     for _ in range(2):
-        respx.get("https://testerhome.com/jobs?page=1").mock(
-            return_value=httpx.Response(200, text=FIX_OK)
-        )
-        respx.get("https://testerhome.com/jobs?page=2").mock(
-            return_value=httpx.Response(200, text=FIX_EMPTY)
-        )
         await run(
             region="",
             keywords=("",),
             source_factory=_factory(tmp_path),
             db_path=db_path,
             data_root=tmp_path,
-            max_pages=2,
+            max_pages=1,
             max_jobs=100,
             use_cache=False,
         )
@@ -248,7 +232,7 @@ async def test_unhandled_source_exception_still_finishes_run(tmp_path: Path) -> 
 
 
 # ---------------------------------------------------------------------------
-# L3: cache rows must be tagged with the real source name, not "testerhome" literal
+# L3: cache rows must be tagged with the real source name, not a hardcoded literal
 # ---------------------------------------------------------------------------
 
 
@@ -297,127 +281,3 @@ async def test_cache_rows_tagged_with_source_name(tmp_path: Path) -> None:
         cur = await conn.execute("SELECT DISTINCT source FROM url_cache")
         sources = [row[0] for row in await cur.fetchall()]
     assert sources == [fake_name], f"Expected source={fake_name!r} but got {sources}"
-
-
-# ---------------------------------------------------------------------------
-# L4: transient 500 on detail must NOT overwrite a previously earned LIVE signal
-# ---------------------------------------------------------------------------
-
-
-def _factory_detail_on(tmp_path: Path):
-    """Like _factory but with detail enrichment enabled."""
-
-    async def _no_sleep(_s: float) -> None:
-        return None
-
-    base_cfg = load_source_config(CFG_PATH)
-    cfg = base_cfg.model_copy(
-        update={"detail": base_cfg.detail.model_copy(update={"enabled": True})}
-    )
-
-    def _make(ac: httpx.AsyncClient, on_fetch, cache_get):
-        http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
-        return TesterHomeSource(
-            cfg=cfg,
-            http=http,
-            data_root=tmp_path,
-            sleep=_no_sleep,
-            on_fetch=on_fetch,
-            cache_get=cache_get,
-        )
-
-    return _make
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_transient_500_does_not_overwrite_prior_live_signal(tmp_path: Path) -> None:
-    """If a row was 'live' yesterday and today's detail returns 500, the
-    persisted row must still be 'live' — verified through the full
-    crawl + storage round trip.
-
-    Note: placed in tests/pipeline/test_crawl_e2e.py (Option B) because the
-    plan's own phrasing says "verified through the full crawl + storage round
-    trip" — that is pipeline-level behaviour, not a source-unit concern. The
-    existing source tests in test_testerhome_with_detail.py do not touch storage,
-    so adding DB assertions there would require significant new setup. Here we
-    reuse the established open_db + insert_jobs + pipeline.crawl.run pattern.
-    """
-    from jma.storage.db import insert_jobs, open_db, start_run
-
-    db_path = tmp_path / "data/jobs.db"
-
-    # The listing_ok.html fixture has topic 100 at Hangzhou.
-    # Compute the job id that the crawler will produce for testerhome:/topics/100.
-    pre_job_id = job_id(source="testerhome", internal_id="100", title="", company=None, city=None)
-    yesterday = datetime.now(UTC) - timedelta(days=1)
-
-    # Pre-populate the DB with a LIVE row for that job so we can verify it's preserved.
-    pre_job = Job(
-        id=pre_job_id,
-        canonical_id=canonical_id(title="AI Agent Engineer", company=None, city="Hangzhou"),
-        source="testerhome",
-        source_internal_id="100",
-        title="AI Agent Engineer",
-        title_raw="【杭州·余杭】AI Agent Engineer 15-30K·14薪",
-        company=None,
-        location=Location(city="Hangzhou"),
-        salary=Salary(),
-        experience=Experience(),
-        fetched_at=yesterday,
-        url="https://testerhome.com/topics/100",
-        raw_payload_ref="raw/testerhome/placeholder.html.gz",
-        url_status=UrlStatus.LIVE,
-        url_last_checked_at=yesterday,
-    )
-
-    ctx = await open_db(db_path)
-    async with ctx as db:
-        run_id_pre = await start_run(db, region="Hangzhou", keywords=("AI agent",))
-        await insert_jobs(db, run_id_pre, [pre_job])
-
-    # Mock listing returns FIX_OK (topic 100 matches Hangzhou + "AI agent").
-    # Mock listing page 2 as empty so crawl stops.
-    # Mock topic 100 detail as 500 (transient server error).
-    respx.get("https://testerhome.com/jobs?page=1").mock(
-        return_value=httpx.Response(200, text=FIX_OK)
-    )
-    respx.get("https://testerhome.com/jobs?page=2").mock(
-        return_value=httpx.Response(200, text=FIX_EMPTY)
-    )
-    # Catch-all for all topic detail URLs: topic 100 returns 500 (the case under
-    # test), topic 101 is filtered out by region (Beijing), topic 102 survives
-    # both the Hangzhou-region and "AI agent" keyword filters and would also be
-    # fetched. Using a regex catch-all keeps the test robust to fixture changes.
-    respx.get(url__regex=r"https://testerhome\.com/topics/\d+").mock(
-        return_value=httpx.Response(500, text="internal server error")
-    )
-
-    await run(
-        region="Hangzhou",
-        keywords=("AI agent",),
-        source_factory=_factory_detail_on(tmp_path),
-        db_path=db_path,
-        data_root=tmp_path,
-        max_pages=2,
-        max_jobs=100,
-        use_cache=False,
-    )
-
-    # After the crawl, the DB row for topic 100 must still reflect LIVE status.
-    async with aiosqlite.connect(str(db_path)) as conn:
-        cur = await conn.execute(
-            "SELECT url_status, url_last_checked_at FROM jobs WHERE id=?",
-            (pre_job_id,),
-        )
-        row = await cur.fetchone()
-
-    assert row is not None, f"Job {pre_job_id} not found in DB after crawl"
-    url_status, url_last_checked_at = row
-    assert url_status == "live", (
-        f"Expected url_status='live' but got {url_status!r}. "
-        "A transient 500 must not erase an earned LIVE signal."
-    )
-    assert url_last_checked_at == yesterday.isoformat(), (
-        f"url_last_checked_at must not change on transient 500; got {url_last_checked_at!r}"
-    )

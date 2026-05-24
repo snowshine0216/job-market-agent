@@ -59,7 +59,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">7 phases · Phase 1 = current vertical slice · each phase adds one capability without re-architecting</p>
+      <p class="subtitle">7 phases · Phase 2 = current slice · Bing aggregator (SerpAPI) + jma view + TesterHome retirement · each phase adds one capability without re-architecting</p>
     </div>
 
     <div class="diagram-container">
@@ -101,10 +101,10 @@
         <!-- Each lane: 175 wide, x = 30 + i*180, y = 100, h = 800 -->
         <!-- Phase 0 -->
         <rect x="30"   y="100" width="160" height="800" rx="12" fill="rgba(34, 211, 238, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
-        <!-- Phase 1 (CURRENT — highlighted) -->
-        <rect x="200"  y="100" width="180" height="800" rx="12" fill="url(#phase1-glow)" stroke="#34d399" stroke-width="2"/>
-        <!-- Phase 2 -->
-        <rect x="390"  y="100" width="160" height="800" rx="12" fill="rgba(34, 211, 238, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 1 (done) -->
+        <rect x="200"  y="100" width="180" height="800" rx="12" fill="rgba(52, 211, 153, 0.05)" stroke="#34d399" stroke-width="1" stroke-dasharray="6,4"/>
+        <!-- Phase 2 (CURRENT — highlighted) -->
+        <rect x="390"  y="100" width="160" height="800" rx="12" fill="url(#phase1-glow)" stroke="#34d399" stroke-width="2"/>
         <!-- Phase 3 -->
         <rect x="560"  y="100" width="170" height="800" rx="12" fill="rgba(167, 139, 250, 0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="6,4"/>
         <!-- Phase 4 -->
@@ -119,13 +119,13 @@
         <text x="110" y="130" fill="#22d3ee" font-size="11" font-weight="700" text-anchor="middle">PHASE 0</text>
         <text x="110" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Foundation · ½ d</text>
 
-        <rect x="212" y="112" width="156" height="40" rx="6" fill="rgba(6, 78, 59, 0.7)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="290" y="128" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">PHASE 1 ◆ CURRENT</text>
+        <rect x="212" y="112" width="156" height="40" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="290" y="128" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">PHASE 1 ✓ DONE</text>
         <text x="290" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Job search works · 2–3 d</text>
 
-        <rect x="402" y="112" width="136" height="40" rx="6" fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="470" y="130" fill="#22d3ee" font-size="11" font-weight="700" text-anchor="middle">PHASE 2</text>
-        <text x="470" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Multi-source · 2 d</text>
+        <rect x="402" y="112" width="136" height="40" rx="6" fill="rgba(6, 78, 59, 0.7)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="470" y="130" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">PHASE 2 ◆ CURRENT</text>
+        <text x="470" y="145" fill="#94a3b8" font-size="8" text-anchor="middle">Bing + jma view · 2 d</text>
 
         <rect x="572" y="112" width="146" height="40" rx="6" fill="rgba(76, 29, 149, 0.5)" stroke="#a78bfa" stroke-width="1"/>
         <text x="645" y="130" fill="#a78bfa" font-size="11" font-weight="700" text-anchor="middle">PHASE 3</text>
@@ -205,7 +205,7 @@
         <text x="251" y="333" fill="white" font-size="9" font-weight="600" text-anchor="middle">sources/</text>
         <text x="251" y="350" fill="#34d399" font-size="8" text-anchor="middle">base.py</text>
         <text x="251" y="362" fill="#34d399" font-size="8" text-anchor="middle">http.py</text>
-        <text x="251" y="374" fill="#34d399" font-size="8" text-anchor="middle">testerhome</text>
+        <text x="251" y="374" fill="#34d399" font-size="8" text-anchor="middle">testerhome ✓</text>
         <text x="251" y="388" fill="#64748b" font-size="7" text-anchor="middle">httpx async</text>
 
         <rect x="293" y="315" width="72" height="80" rx="6" fill="#0f172a"/>
@@ -236,44 +236,45 @@
         <text x="290" y="662" fill="#94a3b8" font-size="8" text-anchor="middle">1.B blockage classifier</text>
         <text x="290" y="674" fill="#94a3b8" font-size="8" text-anchor="middle">1.C TesterHome DOM</text>
 
-        <!-- ============ PHASE 2 — Multi-source ============ -->
-        <rect x="405" y="170" width="130" height="80" rx="6" fill="#0f172a"/>
-        <rect x="405" y="170" width="130" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="470" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/randstad</text>
-        <text x="470" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">variants cn / com</text>
-        <text x="470" y="220" fill="#94a3b8" font-size="8" text-anchor="middle">requires_browser?</text>
-        <text x="470" y="233" fill="#64748b" font-size="7" text-anchor="middle">httpx OR Playwright</text>
-        <text x="470" y="244" fill="#22d3ee" font-size="7" text-anchor="middle">case 2.B</text>
+        <!-- ============ PHASE 2 — Bing aggregator + jma view ============ -->
+        <rect x="405" y="170" width="130" height="90" rx="6" fill="#0f172a"/>
+        <rect x="405" y="170" width="130" height="90" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="470" y="190" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/bing.py</text>
+        <text x="470" y="207" fill="#34d399" font-size="8" text-anchor="middle">SerpAPI Bing engine</text>
+        <text x="470" y="220" fill="#94a3b8" font-size="8" text-anchor="middle">5 boards via site:</text>
+        <text x="470" y="233" fill="#94a3b8" font-size="7" text-anchor="middle">snippet-only · data_quality=0.4</text>
+        <text x="470" y="246" fill="#34d399" font-size="7" text-anchor="middle">source=bing:&lt;host&gt; · ADR-0005</text>
+        <text x="470" y="257" fill="#64748b" font-size="7" text-anchor="middle">case 2.A</text>
 
-        <rect x="405" y="265" width="130" height="80" rx="6" fill="#0f172a"/>
-        <rect x="405" y="265" width="130" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="470" y="285" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/bing</text>
-        <text x="470" y="302" fill="#94a3b8" font-size="8" text-anchor="middle">Bing Web Search v7</text>
-        <text x="470" y="315" fill="#94a3b8" font-size="8" text-anchor="middle">aggregator queries</text>
-        <text x="470" y="328" fill="#64748b" font-size="7" text-anchor="middle">snippet-only Job</text>
-        <text x="470" y="340" fill="#22d3ee" font-size="7" text-anchor="middle">data_quality=0.4 · case 2.A</text>
+        <rect x="405" y="275" width="130" height="75" rx="6" fill="#0f172a"/>
+        <rect x="405" y="275" width="130" height="75" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="470" y="294" fill="white" font-size="10" font-weight="600" text-anchor="middle">jma view</text>
+        <text x="470" y="309" fill="#34d399" font-size="8" text-anchor="middle">report/view.py pure</text>
+        <text x="470" y="322" fill="#94a3b8" font-size="8" text-anchor="middle">Jinja2 static HTML</text>
+        <text x="470" y="335" fill="#94a3b8" font-size="7" text-anchor="middle">sortable · file:// blob links</text>
+        <text x="470" y="346" fill="#64748b" font-size="7" text-anchor="middle">no web server</text>
 
-        <rect x="405" y="360" width="130" height="55" rx="6" fill="#0f172a"/>
-        <rect x="405" y="360" width="130" height="55" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="470" y="378" fill="white" font-size="10" font-weight="600" text-anchor="middle">sources/browser</text>
-        <text x="470" y="393" fill="#94a3b8" font-size="8" text-anchor="middle">Playwright wrapper</text>
-        <text x="470" y="406" fill="#64748b" font-size="7" text-anchor="middle">opt-in per source</text>
+        <rect x="405" y="365" width="130" height="55" rx="6" fill="#0f172a"/>
+        <rect x="405" y="365" width="130" height="55" rx="6" fill="rgba(6, 78, 59, 0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="470" y="383" fill="white" font-size="10" font-weight="600" text-anchor="middle">run_jobs.raw_ref</text>
+        <text x="470" y="398" fill="#34d399" font-size="8" text-anchor="middle">per-Run blob snapshot</text>
+        <text x="470" y="411" fill="#64748b" font-size="7" text-anchor="middle">.json.gz · ADR-0005</text>
 
-        <rect x="405" y="430" width="130" height="55" rx="6" fill="#0f172a"/>
-        <rect x="405" y="430" width="130" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="470" y="448" fill="white" font-size="10" font-weight="600" text-anchor="middle">jma sources status</text>
-        <text x="470" y="463" fill="#94a3b8" font-size="8" text-anchor="middle">probe + reasons</text>
-        <text x="470" y="476" fill="#64748b" font-size="7" text-anchor="middle">never-fail policy</text>
+        <rect x="405" y="435" width="130" height="45" rx="6" fill="#0f172a"/>
+        <rect x="405" y="435" width="130" height="45" rx="6" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="470" y="453" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Phase 2.1 (deferred)</text>
+        <text x="470" y="468" fill="#94a3b8" font-size="7" text-anchor="middle">detail-fetch enrichment</text>
+        <text x="470" y="478" fill="#64748b" font-size="6" text-anchor="middle">see ADR-0005 trigger</text>
 
-        <text x="470" y="525" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
-        <text x="470" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">3 sources behind one</text>
-        <text x="470" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">protocol; blockage</text>
-        <text x="470" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">degrades gracefully</text>
+        <text x="470" y="525" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Exit criterion</text>
+        <text x="470" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">jma crawl writes ≥1</text>
+        <text x="470" y="554" fill="#94a3b8" font-size="8" text-anchor="middle">bing:* row; jma view</text>
+        <text x="470" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">renders valid HTML</text>
 
         <text x="470" y="610" fill="#64748b" font-size="8" font-style="italic" text-anchor="middle">key insight:</text>
         <text x="470" y="625" fill="#94a3b8" font-size="8" text-anchor="middle">snippet-only Jobs</text>
-        <text x="470" y="637" fill="#94a3b8" font-size="8" text-anchor="middle">keep stats alive when</text>
-        <text x="470" y="649" fill="#94a3b8" font-size="8" text-anchor="middle">zhaopin/liepin soft-block</text>
+        <text x="470" y="637" fill="#94a3b8" font-size="8" text-anchor="middle">keep stats alive; raw</text>
+        <text x="470" y="649" fill="#94a3b8" font-size="8" text-anchor="middle">snippet → LLM input Ph3</text>
 
         <!-- ============ PHASE 3 — Extraction (LLM enters) ============ -->
         <rect x="575" y="170" width="140" height="80" rx="6" fill="#0f172a"/>
@@ -567,7 +568,7 @@
       </div>
     </div>
 
-    <p class="footer">job-market-agent · Phased build per PLAN.md §4 · Phase 1 currently in flight · 2026-05-22</p>
+    <p class="footer">job-market-agent · Phased build per PLAN.md §4 · Phase 2 current slice (Bing aggregator + jma view) · ADR-0005 (bing:&lt;host&gt; naming, snippet data quality) · 2026-05-24</p>
   </div>
 
   <script>
