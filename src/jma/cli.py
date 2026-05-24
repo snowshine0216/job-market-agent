@@ -14,7 +14,6 @@ from jma.domain.models import SourceResult, SourceStatus, UrlStatus
 from jma.pipeline.crawl import run as pipeline_run
 from jma.sources.base import JobSource, load_source_config
 from jma.sources.http import AsyncHttpClient
-from jma.sources.testerhome import TesterHomeSource
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -34,18 +33,37 @@ def _data_root() -> Path:
     return Path.cwd() / "data"
 
 
-def _factory_for(source_name: str, data_root: Path, with_detail: bool):
+def _check_required_env_for_sources(source_names: list[str]) -> None:
+    """Raise typer.Exit(1) with a clear message if any selected source's
+    api_key_env is unset. Runs after Typer arg parsing, before the DB opens
+    (spec §2 row 9). Pure on env state."""
+    for name in source_names:
+        try:
+            cfg = load_source_config(_CFG_DIR / f"{name}.yaml")
+        except FileNotFoundError:
+            continue  # _factory_for will raise a clearer error later
+        env_name = getattr(cfg, "api_key_env", None)
+        if env_name and not os.environ.get(env_name):
+            typer.echo(
+                f"missing env var {env_name} (required by source {name!r})", err=True
+            )
+            raise typer.Exit(code=1)
+
+
+def _factory_for(source_name: str, data_root: Path):
     cfg = load_source_config(_CFG_DIR / f"{source_name}.yaml")
-    if with_detail:
-        cfg = cfg.model_copy(update={"detail": cfg.detail.model_copy(update={"enabled": True})})
+    if source_name == "bing":
+        # Lazy import so `jma view` works even if jma.sources.bing has a syntax-time issue.
+        from jma.sources.bing import BingAggregatorSource
 
-    def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
-        http = AsyncHttpClient(ac, rate=cfg.rate)
-        return TesterHomeSource(
-            cfg=cfg, http=http, data_root=data_root, on_fetch=on_fetch, cache_get=cache_get
-        )
+        def _make(ac: httpx.AsyncClient, on_fetch, cache_get) -> JobSource:
+            http = AsyncHttpClient(ac, rate=cfg.rate)
+            return BingAggregatorSource(
+                cfg=cfg, http=http, data_root=data_root, on_fetch=on_fetch, cache_get=cache_get
+            )
 
-    return _make
+        return _make
+    raise KeyError(f"unknown source: {source_name!r}")
 
 
 def _summary_lines(
@@ -91,24 +109,18 @@ def crawl(
         ..., "--region", help="Region (e.g. Hangzhou). Empty disables region filter."
     ),
     keywords: list[str] = typer.Option(..., "--keywords", help="Repeatable keyword phrase."),
-    source: list[str] = typer.Option(["testerhome"], "--source", help="Source name (repeatable)."),
+    source: list[str] = typer.Option(["bing"], "--source", help="Source name (repeatable)."),
     max_pages: int = typer.Option(5, "--max-pages"),
     max_jobs: int = typer.Option(300, "--max-jobs"),
     no_cache: bool = typer.Option(False, "--no-cache"),
-    with_detail: bool = typer.Option(
-        False,
-        "--with-detail/--no-detail",
-        help=(
-            "Fetch each job's detail page to populate company/salary "
-            "(slower; adds N HTTP calls per page)."
-        ),
-    ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    # Fail fast on missing env vars required by selected sources (spec §2 row 9).
+    _check_required_env_for_sources(source)
     keywords_t = tuple(keywords)
     data_root = _data_root()  # resolve once; used in factory, pipeline, and summary
     db_path = data_root / "jobs.db"
@@ -120,7 +132,7 @@ def crawl(
             run_id, results = await pipeline_run(
                 region=region,
                 keywords=keywords_t,
-                source_factory=_factory_for(s_name, data_root, with_detail=with_detail),
+                source_factory=_factory_for(s_name, data_root),
                 db_path=db_path,
                 data_root=data_root,
                 max_pages=max_pages,
