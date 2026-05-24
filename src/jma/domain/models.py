@@ -117,6 +117,18 @@ class Job(BaseModel):
     url_last_checked_at: datetime | None = None
 
 
+class Run(BaseModel):
+    """A single execution of `jma crawl`. See CONTEXT.md [[Run]]."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    region: str
+    keywords: tuple[str, ...]
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
 class SourceResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 

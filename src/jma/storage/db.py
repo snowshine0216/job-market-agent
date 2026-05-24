@@ -69,8 +69,9 @@ CREATE INDEX IF NOT EXISTS idx_jobs_fetched_at  ON jobs(fetched_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_city        ON jobs(location_city);
 
 CREATE TABLE IF NOT EXISTS run_jobs (
-    run_id    TEXT NOT NULL REFERENCES runs(id),
-    job_id    TEXT NOT NULL REFERENCES jobs(id),
+    run_id          TEXT NOT NULL REFERENCES runs(id),
+    job_id          TEXT NOT NULL REFERENCES jobs(id),
+    raw_payload_ref TEXT NOT NULL,
     PRIMARY KEY (run_id, job_id)
 );
 
@@ -272,12 +273,174 @@ async def insert_jobs(
     run_id: str,
     jobs: Iterable[Job],
 ) -> None:
+    jobs = list(jobs)
     rows = [_job_to_row(j) for j in jobs]
     if not rows:
         return
     await conn.executemany(_INSERT_JOB, rows)
     await conn.executemany(
-        "INSERT OR IGNORE INTO run_jobs (run_id, job_id) VALUES (?, ?)",
-        [(run_id, row[0]) for row in rows],
+        "INSERT OR IGNORE INTO run_jobs (run_id, job_id, raw_payload_ref) VALUES (?, ?, ?)",
+        [(run_id, j.id, j.raw_payload_ref) for j in jobs],
     )
     await conn.commit()
+
+
+def _row_to_job(row: tuple, run_blob_ref: str) -> Job:
+    """Hydrate a Job from a jobs-table row.
+
+    `run_blob_ref` is the per-Run raw_payload_ref from run_jobs, used in
+    place of the row's latest-seen jobs.raw_payload_ref so the view links
+    to the blob captured during *that* Run (spec §2 row 17).
+    """
+    from jma.domain.models import (  # local import: avoid widening module imports
+        Experience,
+        Job,
+        Location,
+        Salary,
+        SalaryPeriod,
+        Seniority,
+        UrlStatus,
+        WorkMode,
+    )
+
+    (
+        id_,
+        canonical_id_,
+        source,
+        source_internal_id,
+        title,
+        title_raw,
+        company,
+        location_country,
+        location_city,
+        location_district,
+        location_work_mode,
+        salary_min,
+        salary_max,
+        salary_currency,
+        salary_period,
+        salary_months_per_year,
+        salary_raw,
+        salary_parsed,
+        experience_min_years,
+        experience_max_years,
+        experience_raw,
+        skills_raw_json,
+        skills_canonical_json,
+        seniority,
+        responsibilities_summary,
+        description_text,
+        posted_at,
+        fetched_at,
+        url,
+        _jobs_raw_payload_ref,  # latest-seen on jobs; we override with the per-Run value
+        data_quality,
+        url_status,
+        url_last_checked_at,
+    ) = row
+    return Job(
+        id=id_,
+        canonical_id=canonical_id_,
+        source=source,
+        source_internal_id=source_internal_id,
+        title=title,
+        title_raw=title_raw,
+        company=company,
+        location=Location(
+            country=location_country,
+            city=location_city,
+            district=location_district,
+            work_mode=WorkMode(location_work_mode),
+        ),
+        salary=Salary(
+            min=salary_min,
+            max=salary_max,
+            currency=salary_currency,
+            period=SalaryPeriod(salary_period),
+            months_per_year=salary_months_per_year,
+            raw=salary_raw,
+            parsed=bool(salary_parsed),
+        ),
+        experience=Experience(
+            min_years=experience_min_years,
+            max_years=experience_max_years,
+            raw=experience_raw,
+        ),
+        skills_raw=json.loads(skills_raw_json),
+        skills_canonical=json.loads(skills_canonical_json),
+        seniority=Seniority(seniority),
+        responsibilities_summary=responsibilities_summary,
+        description_text=description_text,
+        posted_at=datetime.fromisoformat(posted_at) if posted_at else None,
+        fetched_at=datetime.fromisoformat(fetched_at),
+        url=url,
+        raw_payload_ref=run_blob_ref,
+        data_quality=data_quality,
+        url_status=UrlStatus(url_status),
+        url_last_checked_at=(
+            datetime.fromisoformat(url_last_checked_at) if url_last_checked_at else None
+        ),
+    )
+
+
+# Order: posted_at DESC NULLS LAST, fetched_at DESC. NULLS LAST requires
+# SQLite 3.30+ (2019). Spec §3.5 second-to-last bullet.
+_SELECT_JOBS_FOR_RUN = """
+SELECT j.*, rj.raw_payload_ref AS run_blob
+FROM jobs j
+JOIN run_jobs rj ON rj.job_id = j.id
+WHERE rj.run_id = ?
+ORDER BY j.posted_at DESC NULLS LAST, j.fetched_at DESC
+"""
+
+
+async def jobs_for_run(conn: aiosqlite.Connection, run_id: str) -> list[Job]:
+    cur = await conn.execute(_SELECT_JOBS_FOR_RUN, (run_id,))
+    rows = await cur.fetchall()
+    # Each row has 33 jobs-table columns followed by run_blob (the per-Run ref).
+    jobs: list[Job] = []
+    for r in rows:
+        run_blob = r[-1]
+        jobs_columns = tuple(r[:-1])
+        jobs.append(_row_to_job(jobs_columns, run_blob_ref=run_blob))
+    return jobs
+
+
+async def latest_finished_run(conn: aiosqlite.Connection) -> "Run | None":
+    from jma.domain.models import Run  # local import
+
+    cur = await conn.execute(
+        "SELECT id, region, keywords_json, started_at, finished_at "
+        "FROM runs WHERE finished_at IS NOT NULL "
+        "ORDER BY started_at DESC LIMIT 1"
+    )
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    return Run(
+        id=row[0],
+        region=row[1],
+        keywords=tuple(json.loads(row[2])),
+        started_at=datetime.fromisoformat(row[3]),
+        finished_at=datetime.fromisoformat(row[4]),
+    )
+
+
+async def get_run(conn: aiosqlite.Connection, run_id: str) -> "Run | None":
+    """Fetch a Run by id; finished_at may be None."""
+    from jma.domain.models import Run
+
+    cur = await conn.execute(
+        "SELECT id, region, keywords_json, started_at, finished_at FROM runs WHERE id = ?",
+        (run_id,),
+    )
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    return Run(
+        id=row[0],
+        region=row[1],
+        keywords=tuple(json.loads(row[2])),
+        started_at=datetime.fromisoformat(row[3]),
+        finished_at=datetime.fromisoformat(row[4]) if row[4] else None,
+    )
