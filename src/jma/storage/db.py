@@ -108,6 +108,13 @@ _JOBS_MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE jobs ADD COLUMN url_last_checked_at TEXT",
 )
 
+_RUN_JOBS_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    (
+        "raw_payload_ref",
+        "ALTER TABLE run_jobs ADD COLUMN raw_payload_ref TEXT NOT NULL DEFAULT ''",
+    ),
+)
+
 
 async def _apply_jobs_migrations(conn: aiosqlite.Connection) -> None:
     """Idempotent column additions for existing DBs. SQLite has no
@@ -124,12 +131,27 @@ async def _apply_jobs_migrations(conn: aiosqlite.Connection) -> None:
     await conn.commit()
 
 
+async def _apply_run_jobs_migrations(conn: aiosqlite.Connection) -> None:
+    """Idempotent column additions for run_jobs on pre-existing DBs.
+    Mirrors _apply_jobs_migrations: swallow duplicate-column-name errors only."""
+    import sqlite3
+
+    for _col, stmt in _RUN_JOBS_MIGRATIONS:
+        try:
+            await conn.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+    await conn.commit()
+
+
 async def open_db(path: str | Path) -> _DbContext:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = await aiosqlite.connect(str(p))
     await conn.executescript(_DDL)
     await _apply_jobs_migrations(conn)
+    await _apply_run_jobs_migrations(conn)
     return _DbContext(conn)
 
 

@@ -151,3 +151,47 @@ async def test_run_jobs_raw_payload_ref_column_exists(tmp_path):
         cur = await conn.execute("PRAGMA table_info(run_jobs)")
         cols = [row[1] for row in await cur.fetchall()]
     assert "raw_payload_ref" in cols
+
+
+@pytest.mark.asyncio
+async def test_run_jobs_raw_payload_ref_migration_on_pre_existing_db(tmp_path):
+    """Regression: open_db must add raw_payload_ref to pre-existing run_jobs tables
+    that were created before Phase 2 added the column."""
+    import aiosqlite
+
+    from jma.storage.db import _DDL  # noqa: PLC0415
+
+    db_path = tmp_path / "old.db"
+
+    # Bootstrap with the current DDL so we get all tables, then simulate a
+    # pre-Phase-2 DB by dropping run_jobs and re-creating it without raw_payload_ref.
+    conn = await aiosqlite.connect(str(db_path))
+    await conn.executescript(_DDL)
+    await conn.execute("DROP TABLE IF EXISTS run_jobs")
+    await conn.execute("""
+        CREATE TABLE run_jobs (
+            run_id  TEXT NOT NULL REFERENCES runs(id),
+            job_id  TEXT NOT NULL REFERENCES jobs(id),
+            PRIMARY KEY (run_id, job_id)
+        )
+    """)
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_run_jobs_job ON run_jobs(job_id)"
+    )
+    await conn.commit()
+    await conn.close()
+
+    # Re-open via open_db: migration must add the missing column.
+    ctx = await open_db(db_path)
+    async with ctx as conn:
+        cur = await conn.execute("PRAGMA table_info(run_jobs)")
+        cols = [row[1] for row in await cur.fetchall()]
+        assert "raw_payload_ref" in cols, "migration must add raw_payload_ref column"
+
+        # And insert_jobs must work with the column populated.
+        run_id = await start_run(conn, region="r", keywords=("k",))
+        await insert_jobs(conn, run_id, [_job(iid="m1", blob="raw/bing/blob_m.json.gz")])
+        rows = await jobs_for_run(conn, run_id)
+
+    assert len(rows) == 1
+    assert rows[0].raw_payload_ref == "raw/bing/blob_m.json.gz"
