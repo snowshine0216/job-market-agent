@@ -10,11 +10,31 @@ of where --out writes it (spec §3.5 Pure/effect split).
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from jma.domain.models import Job, Run
 
+# URL schemes that are safe to render as clickable <a> links.
+_SAFE_SCHEMES = frozenset({"http", "https", "mailto"})
+
+
+def _sanitize_url(raw_url: str) -> tuple[str, bool]:
+    """Return (safe_url, url_unsafe).
+
+    If raw_url's scheme is not in _SAFE_SCHEMES (or parsing fails), returns
+    ('#', True). Otherwise returns the original URL and False.
+    """
+    try:
+        scheme = urlparse(raw_url).scheme.lower()
+    except Exception:
+        return "#", True
+    if scheme not in _SAFE_SCHEMES:
+        return "#", True
+    return raw_url, False
+
 
 def _row_dict(job: Job) -> dict:
+    safe_url, url_unsafe = _sanitize_url(job.url)
     return {
         "title": job.title,
         "title_raw": job.title_raw,
@@ -23,7 +43,8 @@ def _row_dict(job: Job) -> dict:
         "salary_raw": job.salary.raw,
         "posted_at": job.posted_at.isoformat() if job.posted_at else None,
         "source": job.source,
-        "url": job.url,
+        "url": safe_url,
+        "url_unsafe": url_unsafe,
         "raw_payload_ref": job.raw_payload_ref,
         "dq": job.data_quality,
     }

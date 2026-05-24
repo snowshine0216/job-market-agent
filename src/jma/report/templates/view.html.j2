@@ -50,7 +50,7 @@
   <td>{{ r.salary_raw or "—" }}</td>
   <td>{{ r.posted_at or "—" }}</td>
   <td>{{ r.source }}</td>
-  <td>{% if r.url %}<a href="{{ r.url }}">{{ r.url[:40] }}{% if r.url|length > 40 %}…{% endif %}</a>{% else %}—{% endif %}</td>
+  <td>{% if r.url_unsafe %}<span class="unsafe-url">{{ r.url }}</span>{% elif r.url %}<a href="{{ r.url }}">{{ r.url[:40] }}{% if r.url|length > 40 %}…{% endif %}</a>{% else %}—{% endif %}</td>
   <td>{% if r.raw_payload_ref %}<a href="file://{{ data_root_abs }}/{{ r.raw_payload_ref }}">{{ r.raw_payload_ref[-16:] }}</a>{% else %}—{% endif %}</td>
   <td class="dq">{{ "%.1f"|format(r.dq) }}</td>
 </tr>

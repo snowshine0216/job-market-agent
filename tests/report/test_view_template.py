@@ -130,3 +130,61 @@ def test_empty_cells_render_as_em_dash():
     rows = tree.css("tbody tr")
     row_2_text = rows[1].text()
     assert "—" in row_2_text
+
+
+def test_unsafe_url_renders_as_span_not_anchor():
+    """Regression: javascript: and data: URLs must NOT appear in <a href> — they
+    must be rendered as plain text inside <span class='unsafe-url'>."""
+    xss_url = "javascript:alert(1)"
+    unsafe_row = {
+        "title": "Malicious Job",
+        "title_raw": "Malicious Job",
+        "company": "ACME",
+        "city": None,
+        "salary_raw": "20K",
+        "posted_at": None,
+        "source": "bing:zhipin.com",
+        "url": "#",
+        "url_unsafe": True,
+        "raw_payload_ref": "raw/bing/20260524/abc1234567890def.json.gz",
+        "dq": 0.4,
+    }
+    html = _render(_context(rows=[unsafe_row]))
+    tree = HTMLParser(html)
+
+    # No <a> should have href="#" while an unsafe-url span is present
+    # (href="#" is the sanitised placeholder, not a real link, so no <a href="#">).
+    unsafe_spans = tree.css("span.unsafe-url")
+    assert unsafe_spans, "expected <span class='unsafe-url'> for an unsafe URL"
+
+    # The <span> must not be wrapped in an <a>.
+    url_anchors = [
+        a for a in tree.css("a")
+        if (a.attributes.get("href") or "") in (xss_url, "#")
+        and a.css("span.unsafe-url")
+    ]
+    assert not url_anchors, "<span class='unsafe-url'> must not be inside an <a>"
+
+
+def test_safe_url_renders_as_anchor():
+    """A normal https URL should still render as an <a> link."""
+    safe_row = {
+        "title": "Normal Job",
+        "title_raw": "Normal Job",
+        "company": "ACME",
+        "city": None,
+        "salary_raw": "20K",
+        "posted_at": None,
+        "source": "bing:zhipin.com",
+        "url": "https://zhipin.com/jobs/999",
+        "url_unsafe": False,
+        "raw_payload_ref": "raw/bing/20260524/abc1234567890def.json.gz",
+        "dq": 0.4,
+    }
+    html = _render(_context(rows=[safe_row]))
+    tree = HTMLParser(html)
+    url_anchors = [
+        a for a in tree.css("a")
+        if "zhipin.com" in (a.attributes.get("href") or "")
+    ]
+    assert url_anchors, "expected <a href> for a safe https URL"

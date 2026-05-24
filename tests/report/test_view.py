@@ -97,3 +97,48 @@ def test_context_handles_none_company():
     j = _job(company=None)
     ctx = build_view_context(_run(), [j], Path("/tmp"))
     assert ctx["rows"][0]["company"] is None
+
+
+def _job_with_url(url: str) -> Job:
+    """Build a minimal Job whose only varying field is url."""
+    return Job(
+        id=job_id(source="bing:zhipin.com", internal_id="xss1", title="t", company=None, city=None),
+        canonical_id=canonical_id(title="t", company=None, city=None),
+        source="bing:zhipin.com",
+        source_internal_id="xss1",
+        title="t",
+        title_raw="t",
+        company=None,
+        location=Location(country="CN"),
+        salary=Salary(),
+        experience=Experience(),
+        posted_at=None,
+        fetched_at=datetime(2026, 5, 24, 0, 0, 0, tzinfo=UTC),
+        url=url,
+        raw_payload_ref="raw/bing/20260524/dummy.json.gz",
+        data_quality=0.4,
+    )
+
+
+def test_javascript_url_is_sanitized_to_hash():
+    j = _job_with_url("javascript:alert(1)")
+    ctx = build_view_context(_run(), [j], Path("/tmp"))
+    row = ctx["rows"][0]
+    assert row["url"] == "#", f"expected '#', got {row['url']!r}"
+    assert row["url_unsafe"] is True
+
+
+def test_data_url_is_sanitized_to_hash():
+    j = _job_with_url("data:text/html,<script>evil()</script>")
+    ctx = build_view_context(_run(), [j], Path("/tmp"))
+    row = ctx["rows"][0]
+    assert row["url"] == "#"
+    assert row["url_unsafe"] is True
+
+
+def test_safe_https_url_is_not_flagged():
+    j = _job_with_url("https://zhipin.com/jobs/123")
+    ctx = build_view_context(_run(), [j], Path("/tmp"))
+    row = ctx["rows"][0]
+    assert row["url"] == "https://zhipin.com/jobs/123"
+    assert not row.get("url_unsafe", False)
