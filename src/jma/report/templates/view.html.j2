@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jma view — {{ run.id[:8] }}</title>
+<style>
+  body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 1.5rem; color: #222; }
+  h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+  .subtitle { color: #555; margin-bottom: 1rem; font-size: .9rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  thead th { text-align: left; padding: .35rem .5rem; background: #f4f4f4; border-bottom: 1px solid #ccc; cursor: pointer; user-select: none; }
+  thead th.sortable::after { content: " ↕"; opacity: .35; font-size: .8em; }
+  thead th.sort-asc::after { content: " ↑"; opacity: 1; }
+  thead th.sort-desc::after { content: " ↓"; opacity: 1; }
+  tbody td { padding: .3rem .5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  tbody tr:hover { background: #fafafa; }
+  a { color: #06c; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  td.dq { text-align: right; font-variant-numeric: tabular-nums; }
+  .truncate { max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<h1>jma view — run {{ run.id[:8] }}...</h1>
+<div class="subtitle">
+  {{ run.region or "(no region)" }} · {{ run.keywords | join(", ") }} ·
+  {{ run.started_at }} · n={{ count }}
+</div>
+
+<table id="jobs">
+<thead>
+<tr>
+  <th class="sortable" data-key="title">title</th>
+  <th class="sortable" data-key="company">company</th>
+  <th class="sortable" data-key="city">city</th>
+  <th class="sortable" data-key="salary_raw">salary_raw</th>
+  <th class="sortable" data-key="posted_at">posted_at</th>
+  <th class="sortable" data-key="source">src</th>
+  <th class="sortable" data-key="url">url</th>
+  <th class="sortable" data-key="raw_payload_ref">blob</th>
+  <th class="sortable sortable-numeric" data-key="dq">dq</th>
+</tr>
+</thead>
+<tbody>
+{% for r in rows -%}
+<tr>
+  <td><div class="truncate" title="{{ r.title_raw }}">{{ r.title or "—" }}</div></td>
+  <td><div class="truncate" title="{{ r.company or '' }}">{{ r.company or "—" }}</div></td>
+  <td>{{ r.city or "—" }}</td>
+  <td>{{ r.salary_raw or "—" }}</td>
+  <td>{{ r.posted_at or "—" }}</td>
+  <td>{{ r.source }}</td>
+  <td>{% if r.url %}<a href="{{ r.url }}">{{ r.url[:40] }}{% if r.url|length > 40 %}…{% endif %}</a>{% else %}—{% endif %}</td>
+  <td>{% if r.raw_payload_ref %}<a href="file://{{ data_root_abs }}/{{ r.raw_payload_ref }}">{{ r.raw_payload_ref[-16:] }}</a>{% else %}—{% endif %}</td>
+  <td class="dq">{{ "%.1f"|format(r.dq) }}</td>
+</tr>
+{%- endfor %}
+</tbody>
+</table>
+
+<script>
+// ~30-line sortable: single-column, two-state (asc ↔ desc); switching columns starts at asc.
+// Numeric comparator on .sortable-numeric columns, ISO-string lex comparator on posted_at
+// (ISO datetimes sort correctly as strings), plain string comparator elsewhere.
+(function () {
+  const table = document.getElementById("jobs");
+  const tbody = table.tBodies[0];
+  const ths = table.tHead.rows[0].cells;
+  let sortKey = null, sortAsc = true;
+  function cmp(a, b, numeric) {
+    if (numeric) { return (parseFloat(a) || 0) - (parseFloat(b) || 0); }
+    return String(a).localeCompare(String(b));
+  }
+  function sortBy(key, idx, numeric) {
+    if (sortKey === key) { sortAsc = !sortAsc; } else { sortKey = key; sortAsc = true; }
+    const rows = Array.from(tbody.rows);
+    rows.sort((r1, r2) => {
+      const v1 = r1.cells[idx].textContent.trim();
+      const v2 = r2.cells[idx].textContent.trim();
+      const c = cmp(v1, v2, numeric);
+      return sortAsc ? c : -c;
+    });
+    for (const r of rows) { tbody.appendChild(r); }
+    for (let i = 0; i < ths.length; i++) {
+      ths[i].classList.remove("sort-asc", "sort-desc");
+    }
+    ths[idx].classList.add(sortAsc ? "sort-asc" : "sort-desc");
+  }
+  for (let i = 0; i < ths.length; i++) {
+    const th = ths[i];
+    if (!th.classList.contains("sortable")) continue;
+    const numeric = th.classList.contains("sortable-numeric");
+    const key = th.getAttribute("data-key");
+    th.addEventListener("click", () => sortBy(key, i, numeric));
+  }
+})();
+</script>
+</body>
+</html>
