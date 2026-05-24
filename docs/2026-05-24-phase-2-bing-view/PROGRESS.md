@@ -37,3 +37,20 @@ Legend: ⏳ pending · 🔄 in-progress · ✅ done · ⚠️ soft-fail (fix loo
 - Total commits before squash: 23 (19 plan tasks + 1 lint reformat + 3 P0/P1 fixes + 1 latent-bug fix + verdict/ship artifacts)
 - Tests: 175 passed / 1 skipped (SerpAPI fixture) / 1 deselected (live marker)
 - Fix rounds: 1 (single round-1 latent-bug `blobs.read FileNotFoundError`)
+
+## Phase 3 — Final validation
+
+Collapsed-scope (spec mode N=1, no cross-item interaction analysis applicable):
+
+- **Workflow-completeness audit:** PASS — all 5 required verdict files present (ship, drift, verify, review, pr-review); XOR holds (verify exists, qa absent — non-web); grill absent as expected (spec mode pre-completed ⏭️).
+- **Build + test sanity on merged feature branch (commit `0865ed4`):** `uv run pytest -m 'not live' -q` → 175 passed / 1 skipped (SerpAPI fixture per spec §6) / 1 deselected (live marker); `uv run ruff check .` clean.
+- **Doc-sync / final /verify / cross-branch diff:** N/A for single-task spec mode (collapsed per `final-validation.md`).
+
+## Close-out
+
+Run complete. `.autodev-current` removed at repo root. The run directory persists in git history as the durable record.
+
+Follow-up issues spun out of this run (not blocking — operator's choice):
+- Capture `tests/fixtures/serpapi_bing_hangzhou_ai_agent.json` from one real SerpAPI call (spec §6) to un-skip the snippet-richness end-to-end test.
+- 13 deferred P1 nits enumerated in [items/001-review.md](items/001-review.md) (no httpx timeout, region-alias log-level, `_parse_iso` swallow, etc.) — each is a small follow-up PR candidate.
+- Pre-existing nit on `pipeline/crawl.py:79` (`_probe.name` in except) — flagged by /code-review round 1 as pre-existing; defer.
