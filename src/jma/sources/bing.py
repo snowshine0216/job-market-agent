@@ -305,10 +305,18 @@ class BingAggregatorSource:
             # Cache lookup uses the key-less URL so the cache is stable across
             # api_key rotations and the key never reaches url_cache or disk.
             hit = await self._cache_get(cache_url) if self._cache_get else None
+            _cache_usable = False
             if hit and hit.status_code == 200 and hit.blob_ref:
-                body_text = blobs.read(root=self._root, ref=hit.blob_ref)
-                blob_ref = hit.blob_ref
-            else:
+                try:
+                    body_text = blobs.read(root=self._root, ref=hit.blob_ref)
+                    blob_ref = hit.blob_ref
+                    _cache_usable = True
+                except FileNotFoundError:
+                    _log.info(
+                        "cache stale (blob missing for %s); refetching",
+                        cache_url,
+                    )
+            if not _cache_usable:
                 fetched = await self._http.fetch(request_url)
                 if fetched.status_code != 200:
                     # Bing/SerpAPI failure for this page. If we already have rows,

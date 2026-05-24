@@ -324,6 +324,77 @@ async def test_api_key_not_in_cache_url_or_blob_ref(tmp_path):
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_cache_hit_with_missing_blob_falls_through_to_fetch(tmp_path, caplog):
+    """Cache-hit branch: if blobs.read raises FileNotFoundError (blob deleted out-of-band
+    while url_cache row is still within TTL), the source must fall through to a fresh fetch
+    and complete successfully — not raise a confusing OS error.
+    """
+    import logging
+
+    from jma.storage.cache import CacheHit
+
+    payload = {
+        "organic_results": [
+            {
+                "title": "AI Agent | BOSS直聘",
+                "link": "https://www.zhipin.com/job_detail/77.html",
+                "snippet": "Hangzhou 20K",
+            },
+        ],
+    }
+    fresh_body = json.dumps(payload)
+
+    # Seed the cache_get to return a hit (blob_ref points to a non-existent file).
+    from datetime import UTC, datetime, timedelta
+
+    hit = CacheHit(
+        url="https://serpapi.com/search?engine=bing&q=test&start=0&count=10",
+        blob_ref="raw/bing/20260101/deadbeef1234.json.gz",  # deliberately missing
+        fetched_at=datetime.now(UTC) - timedelta(hours=1),  # within 24h TTL
+        status_code=200,
+    )
+
+    async def _cache_get(url: str) -> CacheHit | None:
+        return hit
+
+    respx.get("https://serpapi.com/search").mock(return_value=httpx.Response(200, text=fresh_body))
+
+    cfg = load_source_config(CFG_PATH)
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    caplog.set_level(logging.INFO, logger="jma.sources.bing")
+
+    async with httpx.AsyncClient() as ac:
+        http = AsyncHttpClient(ac, rate=cfg.rate, sleep=_no_sleep)
+        src = BingAggregatorSource(
+            cfg=cfg,
+            http=http,
+            data_root=tmp_path,
+            api_key="TESTKEY",
+            sleep=_no_sleep,
+            cache_get=_cache_get,
+        )
+        # blobs.read must raise FileNotFoundError because the blob file doesn't exist
+        # in tmp_path (we didn't write it).  The source should fall through to fresh fetch.
+        result = await src.crawl(
+            region="Hangzhou", keywords=("AI agent",), max_pages=1, max_jobs=10
+        )
+
+    assert result.status is SourceStatus.OK
+    assert len(result.jobs) == 1
+    assert result.jobs[0].source == "bing:zhipin.com"
+    # Fresh fetch must have been issued.
+    assert respx.calls.call_count == 1
+    # An INFO log must mention the stale blob.
+    assert any(
+        "cache stale" in rec.message and "blob missing" in rec.message for rec in caplog.records
+    )
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_pagination_advances_start_param(tmp_path):
     pages_seen: list[str] = []
 
